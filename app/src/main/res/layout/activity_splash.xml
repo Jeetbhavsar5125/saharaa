@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    tools:context=".activities.SplashActivity">
+
+    <!-- Center container -->
+    <LinearLayout
+        android:id="@+id/splashContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- App Logo -->
+        <ImageView
+            android:id="@+id/imgSplashLogo"
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:src="@drawable/saharaa_logo"
+            android:contentDescription="Saharaa App Logo"
+            android:layout_marginBottom="20dp" />
+
+        <!-- App Name -->
+        <TextView
+            android:id="@+id/tvSplashTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Saharaa"
+            android:textSize="36sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
