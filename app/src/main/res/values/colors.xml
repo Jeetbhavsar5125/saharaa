@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
+    <!-- Base Colors (Brown Theme) -->
+    <color name="brown_primary">#5D4037</color>
+    <color name="brown_primary_dark">#3E2723</color>
+    <color name="brown_light">#8D6E63</color>
+    <color name="brown_accent">#D7CCC8</color>
+    
+    <!-- Backgrounds -->
+    <color name="background_light">#FFF8F1</color>  <!-- Warm Cream -->
+    <color name="background_dark">#3E2723</color>   <!-- Deep Warm Black/Brown -->
+    <color name="background_offwhite">#F8F9FA</color>
+    <color name="surface_brown_light">#EFEBE9</color>
+
+    <!-- Text -->
+    <color name="text_primary_light">#3E2723</color> <!-- Dark Brown for text on light bg -->
+    <color name="text_secondary_light">#5D4037</color>
+    <color name="text_primary_dark">#ECE0DB</color>
+    <color name="text_secondary_dark">#BCAAA4</color>
+    <color name="text_hint_brown">#A1887F</color>
+
+    <!-- UI Elements -->
     <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="splash_background_light">#F5DEB3</color>
+    <color name="brown_button_secondary">#A1887F</color> <!-- A muted, secondary brown -->
+    
+    <color name="brown_main_bg">#4E342E</color> <!-- Deep Coffee Brown for Activity BG -->
 </resources>

@@ -4,4 +4,9 @@
         <!-- Customize your dark theme here. -->
         <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
     </style>
+
+    <!-- Splash Screen Theme for Dark Mode -->
+    <style name="Theme.Saharaa.Splash" parent="Theme.Saharaa">
+        <item name="android:windowBackground">@color/splash_background_dark</item>
+    </style>
 </resources>

@@ -35,16 +35,20 @@ public class AccessibilityModeActivity extends AppCompatActivity {
         });
 
         // Buttons
-        findViewById(R.id.btnBlind).setOnClickListener(v -> handleSelection(true));
-        findViewById(R.id.btnNotBlind).setOnClickListener(v -> handleSelection(false));
+        // Cards
+        findViewById(R.id.cardBlindMode).setOnClickListener(v -> handleSelection(true));
+        findViewById(R.id.cardVisualMode).setOnClickListener(v -> handleSelection(false));
 
         // Initialize TTS
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.ENGLISH);
+                tts.setLanguage(Locale.US);
+                tts.setSpeechRate(0.85f); // 🔹 Slower speed
 
                 tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-                    @Override public void onStart(String id) {}
+                    @Override
+                    public void onStart(String id) {
+                    }
 
                     @Override
                     public void onDone(String id) {
@@ -55,12 +59,15 @@ public class AccessibilityModeActivity extends AppCompatActivity {
                             runOnUiThread(() -> navigateNext());
                         }
                         if ("RETRY".equals(id)) {
+                            // 🔹 Auto-restart listening after error message
                             runOnUiThread(() -> startListening());
                         }
 
                     }
 
-                    @Override public void onError(String id) {}
+                    @Override
+                    public void onError(String id) {
+                    }
                 });
 
                 askUser();
@@ -71,7 +78,7 @@ public class AccessibilityModeActivity extends AppCompatActivity {
     // Ask question
     private void askUser() {
         waitingForInput = true;
-        speak("Are you visually impaired? Say blind or not blind.", "ASK");
+        speak("Are you visually impaired? Please say blind, or not blind.", "ASK");
     }
 
     // Handle button OR voice selection
@@ -92,13 +99,17 @@ public class AccessibilityModeActivity extends AppCompatActivity {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-        );
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE,
-                Locale.getDefault()
-        );
-        startActivityForResult(intent, SPEECH_REQUEST_CODE);
+                Locale.getDefault());
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Say Blind or Not Blind");
+
+        try {
+            startActivityForResult(intent, SPEECH_REQUEST_CODE);
+        } catch (Exception e) {
+            retry();
+        }
     }
 
     // Handle voice result
@@ -106,22 +117,27 @@ public class AccessibilityModeActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == SPEECH_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-            ArrayList<String> results =
-                    data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+        if (requestCode == SPEECH_REQUEST_CODE) {
+            // Check for SUCCESS
+            if (resultCode == RESULT_OK && data != null) {
+                ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
 
-            if (results == null || results.isEmpty()) {
-                retry();
-                return;
-            }
+                if (results == null || results.isEmpty()) {
+                    retry();
+                    return;
+                }
 
-            String text = results.get(0).toLowerCase();
+                String text = results.get(0).toLowerCase();
 
-            if (text.contains("blind")) {
-                handleSelection(true);
-            } else if (text.contains("not")) {
-                handleSelection(false);
+                if (text.contains("blind") && !text.contains("not")) {
+                    handleSelection(true);
+                } else if (text.contains("not") || text.contains("visual") || text.contains("normal")) {
+                    handleSelection(false);
+                } else {
+                    retry();
+                }
             } else {
+                // 🔹 If suppressed/canceled/error, auto-retry
                 retry();
             }
         }
@@ -131,10 +147,8 @@ public class AccessibilityModeActivity extends AppCompatActivity {
     private void retry() {
         speak(
                 "Sorry, I did not understand. Please say blind or not blind.",
-                "RETRY"
-        );
+                "RETRY");
     }
-
 
     // Save choice
     private void saveAccessibilityMode(boolean isBlind) {
@@ -146,8 +160,7 @@ public class AccessibilityModeActivity extends AppCompatActivity {
     private void navigateNext() {
         startActivity(new Intent(
                 AccessibilityModeActivity.this,
-                LanguageSelectionActivity.class
-        ));
+                LanguageSelectionActivity.class));
         finish();
     }
 

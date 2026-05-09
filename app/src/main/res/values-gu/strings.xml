@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">સહારા</string>
+    <string name="welcome_msg">સ્વાગત છે</string>
+    <string name="login_title">લોગ ઇન</string>
+    <string name="register_title">રજીસ્ટર</string>
+    <string name="mobile_hint">મોબાઈલ નંબર</string>
+    <string name="otp_hint">ઓટીપી</string>
+    <string name="btn_continue">ચાલુ રાખો</string>
+    <string name="or_divider">અથવા</string>
+
+    <string name="voice_welcome">સહારામાં તમારું સ્વાગત છે. કૃપા કરીને તમારો મોબાઈલ નંબર બોલો.</string>
+    <string name="voice_otp">મોબાઇલ નંબર મળ્યો છે. કૃપા કરીને ઓટીપી બોલો.</string>
+    <string name="voice_success">લોગિન સફળ થયું.</string>
+    <string name="voice_retry">માફ કરશો, હું સમજી શક્યો નહીં. કૃપા કરીને ફરી પ્રયાસ કરો.</string>
+
+    <string name="hint_input">મોબાઇલ નંબર અથવા ઇમેઇલ</string>
+    <string name="hint_code">ચકાસણી કોડ (6-અંક)</string>
+    <string name="action_fingerprint">ફિંગરપ્રિન્ટથી લોગ ઇન કરો</string>
+    <string name="msg_biometric_success">ફિંગરપ્રિન્ટ ચકાસણી સફળ</string>
+    <string name="error_invalid_input">અમાન્ય મોબાઇલ અથવા ઇમેઇલ</string>
+</resources>

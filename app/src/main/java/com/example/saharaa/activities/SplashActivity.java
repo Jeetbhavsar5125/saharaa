@@ -7,6 +7,7 @@ import android.speech.tts.UtteranceProgressListener;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -29,11 +30,26 @@ public class SplashActivity extends AppCompatActivity {
             }
         });
 
-
-        // 🔹 Start subtle animation on logo
+        // 🔹 Animate UI Elements (Modern Approach)
         ImageView logo = findViewById(R.id.imgSplashLogo);
-        Animation fadeIn = AnimationUtils.loadAnimation(this, R.anim.fade_in);
-        logo.startAnimation(fadeIn);
+        android.widget.TextView title = findViewById(R.id.tvSplashTitle);
+        android.widget.TextView slogan = findViewById(R.id.tvSplashSlogan);
+
+        // Set initial state
+        logo.setAlpha(0f);
+        logo.setScaleX(0.5f);
+        logo.setScaleY(0.5f);
+
+        title.setAlpha(0f);
+        title.setTranslationY(50f);
+
+        slogan.setAlpha(0f);
+        slogan.setTranslationY(50f);
+
+        // Start Animations
+        logo.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(1500).setStartDelay(300).start();
+        title.animate().alpha(1f).translationY(0).setDuration(1200).setStartDelay(800).start();
+        slogan.animate().alpha(1f).translationY(0).setDuration(1200).setStartDelay(1200).start();
 
         // 🔹 Initialize Text-to-Speech
         textToSpeech = new TextToSpeech(this, status -> {
@@ -50,12 +66,18 @@ public class SplashActivity extends AppCompatActivity {
 
                             @Override
                             public void onDone(String utteranceId) {
-                                // 🔹 After voice → go to Accessibility page
+                                // 🔹 After voice → Check setup status
                                 runOnUiThread(() -> {
-                                    Intent intent = new Intent(
-                                            SplashActivity.this,
-                                            AccessibilityModeActivity.class
-                                    );
+                                    android.content.SharedPreferences prefs = getSharedPreferences("SaharaaPrefs",
+                                            MODE_PRIVATE);
+                                    boolean setupComplete = prefs.getBoolean("SETUP_COMPLETE", false);
+
+                                    Intent intent;
+                                    if (setupComplete) {
+                                        intent = new Intent(SplashActivity.this, MainActivity.class);
+                                    } else {
+                                        intent = new Intent(SplashActivity.this, AccessibilityModeActivity.class);
+                                    }
                                     startActivity(intent);
                                     finish();
                                 });
@@ -64,20 +86,17 @@ public class SplashActivity extends AppCompatActivity {
                             @Override
                             public void onError(String utteranceId) {
                             }
-                        }
-                );
+                        });
 
                 // 🔹 Speak welcome message
                 textToSpeech.speak(
                         "Saharaa. Your voice assistance is starting.",
                         TextToSpeech.QUEUE_FLUSH,
                         null,
-                        "SPLASH_MSG"
-                );
+                        "SPLASH_MSG");
             }
         });
     }
-
 
     @Override
     protected void onDestroy() {
@@ -87,6 +106,7 @@ public class SplashActivity extends AppCompatActivity {
             textToSpeech.shutdown();
         }
     }
+
     @Override
     public void onBackPressed() {
         finishAffinity(); // Exit app completely

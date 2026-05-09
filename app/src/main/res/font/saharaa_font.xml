@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+    TODO: Add your font file to the res/font/ folder and reference it.
+    For example:
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="400"
+        android:font="@font/your_font_name" />
+    -->
+</font-family>

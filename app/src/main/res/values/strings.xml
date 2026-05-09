@@ -1,3 +1,24 @@
 <resources>
-    <string name="app_name">saharaa</string>
+    <string name="app_name">Saharaa</string>
+    <string name="welcome_msg">Welcome</string>
+    <string name="login_title">Log In</string>
+    <string name="register_title">Register</string>
+    <string name="mobile_hint">Mobile Number</string>
+    <string name="otp_hint">OTP</string>
+    <string name="btn_continue">Continue</string>
+    <string name="or_divider">OR</string>
+    
+    <!-- Accessibility / Voice Prompts -->
+    <string name="voice_welcome">Welcome to Saharaa. Please say your mobile number.</string>
+    <string name="voice_otp">Mobile number received. Please say the OTP.</string>
+    <string name="voice_success">Login successful.</string>
+    <string name="voice_retry">Sorry, I didn\'t catch that. Please try again.</string>
+    
+    <string name="hint_input">Mobile Number or Email</string>
+    <string name="hint_code">Verification Code (6-digit)</string>
+    <string name="action_fingerprint">Login with Fingerprint</string>
+    <string name="msg_biometric_success">Fingerprint Verified</string>
+    <string name="error_invalid_input">Invalid Mobile or Email</string>
+    <string name="action_skip">Skip</string>
+    <string name="voice_welcome_skip">Welcome to Saharaa. Say your mobile number, or say Skip to continue as guest.</string>
 </resources>

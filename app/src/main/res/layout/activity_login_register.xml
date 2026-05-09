@@ -2,96 +2,256 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:attr/colorBackground">
+    android:background="@color/brown_main_bg">
 
-    <!-- Container to center everything -->
-    <LinearLayout
-        android:id="@+id/container"
-        android:layout_width="0dp"
+    <TextView
+        android:id="@+id/btnSkip"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="24dp"
+        android:text="@string/action_skip"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:padding="16dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"/>
+
+    <!-- Top Area (Logo) -->
+    <LinearLayout
+        android:id="@+id/topContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:background="@android:color/transparent"
+        app:layout_constraintBottom_toTopOf="@id/bottomSheet"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-        <!-- App Logo -->
-        <ImageView
-            android:id="@+id/imgLogo"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_weight="0.35">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:layout_width="110dp"
+            android:layout_height="110dp"
             android:src="@drawable/saharaa_logo"
-            android:contentDescription="Saharaa App Logo"
-            android:layout_marginBottom="16dp" />
+            android:background="@color/white"
+            android:padding="2dp"
+            app:shapeAppearanceOverlay="@style/CircleImageView"
+            app:strokeColor="@color/brown_accent"
+            app:strokeWidth="2dp" />
 
-
-        <!-- Title -->
         <TextView
-            android:id="@+id/tvTitle"
+            android:id="@+id/tvWelcome"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Welcome to Saharaa"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary"
-            android:layout_marginBottom="32dp"/>
+            android:layout_marginTop="20dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/welcome_msg"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
-        <!-- Mobile Number -->
-        <EditText
-            android:id="@+id/etMobile"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Mobile Number"
-            android:inputType="phone"
-            android:padding="14dp"
-            android:background="@android:drawable/edit_text"
-            android:layout_marginBottom="16dp"/>
+    <!-- Bottom Sheet Surface -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bottomSheet"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_surface_top_rounded"
+        android:backgroundTint="@color/surface_brown_light"
+        android:paddingStart="32dp"
+        android:paddingEnd="32dp"
+        android:paddingTop="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topContainer"
+        app:layout_constraintVertical_weight="0.65">
 
-        <!-- OTP -->
-        <EditText
-            android:id="@+id/etOtp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="OTP"
-            android:inputType="number"
-            android:padding="14dp"
-            android:background="@android:drawable/edit_text"
-            android:layout_marginBottom="24dp"/>
+        <!-- Back Button (Floating top left of sheet) -->
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="12dp"
+            android:src="@android:drawable/ic_media_previous"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/brown_primary" />
 
-        <!-- Buttons Row -->
         <LinearLayout
+            android:id="@+id/toggleContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="52dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_search_pill"
+            android:backgroundTint="@color/white"
             android:orientation="horizontal"
-            android:weightSum="2">
+            android:weightSum="2"
+            app:layout_constraintTop_toBottomOf="@id/btnBack">
 
-            <!-- Login Button -->
-            <Button
-                android:id="@+id/btnLogin"
+            <TextView
+                android:id="@+id/tabLogin"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:text="Login"
-                android:textColor="#FFFFFF"
-                android:backgroundTint="#2B2B2B"
-                android:layout_marginEnd="8dp"/>
+                android:background="@drawable/bg_button_primary"
+                android:backgroundTint="@color/brown_primary"
+                android:gravity="center"
+                android:text="@string/login_title"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
-            <!-- Register Button -->
-            <Button
-                android:id="@+id/btnRegister"
+            <TextView
+                android:id="@+id/tabRegister"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:text="Register"
-                android:textColor="#FFFFFF"
-                android:backgroundTint="#3A3A3A"
-                android:layout_marginStart="8dp"/>
-
+                android:background="@android:color/transparent"
+                android:gravity="center"
+                android:text="@string/register_title"
+                android:textColor="@color/text_secondary_light"
+                android:textSize="16sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
-    </LinearLayout>
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="24dp"
+            android:fillViewport="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/toggleContainer">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="24dp">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/hint_input"
+                    app:boxBackgroundMode="outline"
+                    app:boxCornerRadiusBottomEnd="16dp"
+                    app:boxCornerRadiusBottomStart="16dp"
+                    app:boxCornerRadiusTopEnd="16dp"
+                    app:boxCornerRadiusTopStart="16dp"
+                    app:boxStrokeColor="@color/brown_primary"
+                    app:hintTextColor="@color/brown_primary"
+                    android:textColorHint="@color/text_hint_brown">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etMobile"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textEmailAddress"
+                        android:padding="18dp"
+                        android:textColor="@color/text_primary_light"
+                        android:textSize="16sp"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <FrameLayout
+                    android:id="@+id/otpContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:visibility="gone">
+
+                    <EditText
+                        android:id="@+id/etOtp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:background="@android:color/transparent"
+                        android:cursorVisible="false"
+                        android:inputType="number"
+                        android:maxLength="6"
+                        android:textColor="@android:color/transparent" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:weightSum="6">
+
+                        <TextView android:id="@+id/otpDigit1" style="@style/OtpBoxStyle" />
+                        <TextView android:id="@+id/otpDigit2" style="@style/OtpBoxStyle" />
+                        <TextView android:id="@+id/otpDigit3" style="@style/OtpBoxStyle" />
+                        <TextView android:id="@+id/otpDigit4" style="@style/OtpBoxStyle" />
+                        <TextView android:id="@+id/otpDigit5" style="@style/OtpBoxStyle" />
+                        <TextView android:id="@+id/otpDigit6" style="@style/OtpBoxStyle" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnContinue"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:layout_marginTop="32dp"
+                    android:text="@string/btn_continue"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/brown_primary"
+                    android:textColor="@android:color/white"
+                    app:cornerRadius="32dp"
+                    android:elevation="4dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="32dp"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="20dp"
+                        android:text="@string/or_divider"
+                        android:textColor="@color/text_secondary_dark"
+                        android:background="@drawable/bg_search_pill"
+                        android:backgroundTint="@color/white"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"
+                        android:textSize="12sp"/>
+
+                    <ImageView
+                        android:id="@+id/btnFingerprint"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:background="@drawable/bg_search_pill"
+                        android:backgroundTint="@color/white"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="16dp"
+                        android:src="@drawable/ic_fingerprint"
+                        app:tint="@color/brown_primary"
+                        android:elevation="2dp"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/action_fingerprint"
+                        android:textColor="@color/brown_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </ScrollView>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@color/brown_main_bg"
+    android:gravity="top">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Settings"
+        android:textColor="@color/white"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="32dp"/>
+
+    <Button
+        android:id="@+id/btnChangeMode"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="Change Visual Mode"
+        android:backgroundTint="@color/brown_button_secondary"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/btnChangeLanguage"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="Change Language"
+        android:backgroundTint="@color/brown_button_secondary"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/btnLoginRegister"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="Login / Register"
+        android:backgroundTint="@color/brown_button_secondary"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        android:layout_marginBottom="32dp"/>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/brown_accent"
+        android:layout_marginBottom="32dp"/>
+
+    <Button
+        android:id="@+id/btnResetApp"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="Reset App Data"
+        android:backgroundTint="@android:color/holo_red_dark"
+        android:textColor="@android:color/white"
+        android:textSize="18sp"
+        android:textStyle="bold"/>
+
+</LinearLayout>
