@@ -59,6 +59,12 @@
             android:name=".activities.MainActivity"
             android:exported="false" />
 
+        <!-- 8️⃣ History -->
+        <activity
+            android:name=".activities.HistoryActivity"
+            android:exported="false" />
+
+
     </application>
 
 </manifest>

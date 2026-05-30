@@ -5,10 +5,13 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Toast;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -34,29 +37,29 @@ public class MainActivity extends AppCompatActivity {
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
     private Intent speechIntent;
-    private boolean isBlindUser = false;
-    private boolean isListening = false;
+    private boolean isBlindUser      = false;
+    private boolean isListening      = false;
     private boolean isActivityActive = false;
+    private boolean ttsReady         = false;
+
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // UI
     private View btnScanObject, btnScanBarcode, btnHistory;
     private FloatingActionButton fabMic;
-    // Optional Settings Button field if added to XML later. For now, relying on
-    // voice or back flow.
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-
         isActivityActive = true;
 
         // Init UI
-        btnScanObject = findViewById(R.id.btnScanObject);
+        btnScanObject  = findViewById(R.id.btnScanObject);
         btnScanBarcode = findViewById(R.id.btnScanBarcode);
-        btnHistory = findViewById(R.id.btnHistory);
-        fabMic = findViewById(R.id.fabMic);
+        btnHistory     = findViewById(R.id.btnHistory);
+        fabMic         = findViewById(R.id.fabMic);
 
         // Edge-to-edge
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -74,200 +77,193 @@ public class MainActivity extends AppCompatActivity {
 
         // Back Handler
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                finishAffinity();
-            }
+            @Override public void handleOnBackPressed() { finishAffinity(); }
         });
 
-        // Listeners
-        btnScanObject.setOnClickListener(v -> openObjectScanner());
+        // Click Listeners
+        btnScanObject.setOnClickListener(v  -> openObjectScanner());
         btnScanBarcode.setOnClickListener(v -> openBarcodeScanner());
-        btnHistory.setOnClickListener(v -> openHistory());
+        btnHistory.setOnClickListener(v     -> openHistory());
         fabMic.setOnClickListener(v -> {
-            speak("Listening...", "MANUAL");
-            startListening();
+            if (ttsReady) speak("Listening", "MANUAL");
+            startListeningNow();
         });
 
-        // Add a Settings button listener if visible, else relying on voice.
-        View btnSettings = findViewById(R.id.btnSettings); // Assuming we might add this id to layout
+        View btnSettings = findViewById(R.id.btnSettings);
         if (btnSettings != null) {
-            btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+            btnSettings.setOnClickListener(v ->
+                    startActivity(new Intent(this, SettingsActivity.class)));
         }
     }
 
     private void initApp() {
         SharedPreferences prefs = getSharedPreferences("SaharaaPrefs", MODE_PRIVATE);
         isBlindUser = prefs.getBoolean("IS_BLIND", false);
-        String lang = prefs.getString("LANGUAGE", "en");
+        String lang  = prefs.getString("LANGUAGE", "en");
+
+        // Build speech intent once
+        speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+        // ── Key fix: shorten silence detection so STT returns faster ──
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L);
 
         // Init TTS
         tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                Locale locale = new Locale(lang);
-                if (lang.equals("hi"))
-                    locale = new Locale("hi", "IN");
-                if (lang.equals("gu"))
-                    locale = new Locale("gu", "IN");
-                tts.setLanguage(locale);
+            if (status != TextToSpeech.SUCCESS) return;
 
-                tts.setLanguage(locale);
+            Locale locale = resolveLocale(lang);
+            int result = tts.setLanguage(locale);
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts.setLanguage(Locale.US);
+            }
+            ttsReady = true;
 
-                // Start loop when TTS is done speaking "Welcome" or "Retry"
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override
-                    public void onStart(String id) {
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override public void onStart(String id) {}
+
+                @Override
+                public void onDone(String id) {
+                    // Only re-trigger STT for these IDs; NAV navigates so don't loop
+                    if (isBlindUser && isActivityActive
+                            && ("WELCOME".equals(id) || "LOOP_RETRY".equals(id) || "MANUAL".equals(id))) {
+                        mainHandler.post(() -> startListeningNow());
                     }
-
-                    @Override
-                    public void onDone(String id) {
-                        if (isBlindUser && isActivityActive) {
-                            if ("WELCOME".equals(id) || "LOOP_RETRY".equals(id) || "MANUAL".equals(id)) {
-                                runOnUiThread(() -> startListening());
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void onError(String id) {
-                    }
-                });
-
-                if (isBlindUser) {
-                    speak("Saharaa Vision Ready. Say Scan Product, Barcode, History, or Settings.", "WELCOME");
                 }
+
+                @Override public void onError(String id) {}
+            });
+
+            if (isBlindUser) {
+                // Init SR first, then speak so listener is ready
+                initSpeechRecognizer();
+                speak("Saharaa Vision. Say: scan product, barcode, history, or settings.", "WELCOME");
             }
         });
 
-        // Init SR
-        if (isBlindUser) {
+        // For sighted users we still need SR initialised if FAB is tapped
+        if (!isBlindUser) {
             initSpeechRecognizer();
         }
     }
 
     private void initSpeechRecognizer() {
+        if (speechRecognizer != null) {
+            speechRecognizer.destroy();
+            speechRecognizer = null;
+        }
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-        speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-
         speechRecognizer.setRecognitionListener(new android.speech.RecognitionListener() {
-            @Override
-            public void onReadyForSpeech(Bundle params) {
-                isListening = true;
-            }
-
-            @Override
-            public void onBeginningOfSpeech() {
-            }
-
-            @Override
-            public void onRmsChanged(float rmsdB) {
-            }
-
-            @Override
-            public void onBufferReceived(byte[] buffer) {
-            }
-
-            @Override
-            public void onEndOfSpeech() {
-                isListening = false;
-            }
+            @Override public void onReadyForSpeech(Bundle p) { isListening = true; }
+            @Override public void onBeginningOfSpeech() {}
+            @Override public void onRmsChanged(float r) {}
+            @Override public void onBufferReceived(byte[] b) {}
+            @Override public void onPartialResults(Bundle b) {}
+            @Override public void onEvent(int e, Bundle b) {}
+            @Override public void onEndOfSpeech() { isListening = false; }
 
             @Override
             public void onError(int error) {
                 isListening = false;
-                // Auto Loop on Error (No Match / Timeout)
-                if (isActivityActive && isBlindUser) {
-                    // Slight delay before retry
-                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                        // speak("Listening...", "LOOP_RETRY"); // Optional: Just silence loop
-                        startListening();
-                    }, 1000);
-                }
+                if (!isActivityActive || !isBlindUser) return;
+                // Restart immediately — no delay for ERROR_NO_MATCH/TIMEOUT, tiny delay for others
+                long delay = (error == SpeechRecognizer.ERROR_NO_MATCH
+                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 0L : 300L;
+                mainHandler.postDelayed(() -> startListeningNow(), delay);
             }
 
             @Override
             public void onResults(Bundle results) {
                 isListening = false;
-                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                ArrayList<String> matches =
+                        results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
                     processCommand(matches.get(0).toLowerCase());
-                } else {
-                    if (isActivityActive && isBlindUser)
-                        startListening();
+                } else if (isActivityActive && isBlindUser) {
+                    startListeningNow();
                 }
-            }
-
-            @Override
-            public void onPartialResults(Bundle partialResults) {
-            }
-
-            @Override
-            public void onEvent(int eventType, Bundle params) {
             }
         });
     }
 
-    private void startListening() {
-        if (speechRecognizer != null && !isListening) {
-            runOnUiThread(() -> speechRecognizer.startListening(speechIntent));
+    /** Safe start — cancel any stale session first, then start fresh */
+    private void startListeningNow() {
+        if (!isActivityActive || speechRecognizer == null) return;
+        if (isListening) {
+            speechRecognizer.cancel();
+            isListening = false;
         }
+        runOnUiThread(() -> speechRecognizer.startListening(speechIntent));
     }
 
     private void processCommand(String command) {
         if (command.contains("object") || command.contains("product") || command.contains("item")
                 || (command.contains("scan") && !command.contains("barcode"))) {
-            speak("Opening Object Scanner", "NAV");
+            speak("Opening scanner.", "NAV");
             openObjectScanner();
         } else if (command.contains("barcode") || command.contains("code")) {
-            speak("Opening Barcode Scanner", "NAV");
+            speak("Opening barcode scanner.", "NAV");
             openBarcodeScanner();
         } else if (command.contains("history") || command.contains("recent")) {
-            speak("Opening History", "NAV");
+            speak("Opening history.", "NAV");
             openHistory();
         } else if (command.contains("setting") || command.contains("config") || command.contains("option")) {
-            speak("Opening Settings", "NAV");
+            speak("Opening settings.", "NAV");
             startActivity(new Intent(this, SettingsActivity.class));
         } else {
-            // Retry
-            speak("Sorry, say Scan Product, Barcode, History, or Settings.", "LOOP_RETRY");
+            speak("Say: scan product, barcode, history, or settings.", "LOOP_RETRY");
         }
     }
 
     private void openObjectScanner() {
-        Intent intent = new Intent(this, SmartScannerActivity.class);
-        intent.putExtra("MODE", "OBJECT");
-        startActivity(intent);
+        Intent i = new Intent(this, SmartScannerActivity.class);
+        i.putExtra("MODE", "OBJECT");
+        startActivity(i);
     }
 
     private void openBarcodeScanner() {
-        Intent intent = new Intent(this, SmartScannerActivity.class);
-        intent.putExtra("MODE", "BARCODE");
-        startActivity(intent);
+        Intent i = new Intent(this, SmartScannerActivity.class);
+        i.putExtra("MODE", "BARCODE");
+        startActivity(i);
     }
 
     private void openHistory() {
-        // Placeholder for History
-        Toast.makeText(this, "Opening History...", Toast.LENGTH_SHORT).show();
+        startActivity(new Intent(this, HistoryActivity.class));
     }
 
+    // ─── TTS ────────────────────────────────────────────────────────────────────
+
     private void speak(String msg, String id) {
-        if (tts != null) {
-            tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, id);
+        if (tts == null || !ttsReady) return;
+        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, id);
+    }
+
+    // ─── Locale ────────────────────────────────────────────────────────────────
+
+    private Locale resolveLocale(String lang) {
+        switch (lang) {
+            case "hi": return new Locale("hi", "IN");
+            case "gu": return new Locale("gu", "IN");
+            default:   return Locale.US;
         }
     }
 
-    // Permissions
+    // ─── Permissions ───────────────────────────────────────────────────────────
+
     private boolean checkPermissions() {
-        int cam = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
-        int audio = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO);
-        return cam == PackageManager.PERMISSION_GRANTED && audio == PackageManager.PERMISSION_GRANTED;
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestPermissions() {
         ActivityCompat.requestPermissions(this,
-                new String[] { Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO }, PERMISSION_REQUEST_CODE);
+                new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO},
+                PERMISSION_REQUEST_CODE);
     }
 
     @Override
@@ -283,13 +279,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ─── Lifecycle ─────────────────────────────────────────────────────────────
+
     @Override
     protected void onResume() {
         super.onResume();
         isActivityActive = true;
-        if (isBlindUser && tts != null && !isListening) {
-            // Restart loop if returning to page
-            startListening();
+        // Re-init SR (may have been destroyed on pause)
+        if (speechRecognizer == null) initSpeechRecognizer();
+        // Only start loop if TTS is ready and not already listening
+        if (isBlindUser && ttsReady && !isListening) {
+            mainHandler.postDelayed(() -> startListeningNow(), 300L);
         }
     }
 
@@ -297,21 +297,20 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         isActivityActive = false;
-        if (tts != null)
-            tts.stop();
+        if (tts != null) tts.stop();
         if (speechRecognizer != null) {
             speechRecognizer.stopListening();
-            speechRecognizer.cancel(); // Deep stop
+            speechRecognizer.cancel();
             isListening = false;
         }
+        mainHandler.removeCallbacksAndMessages(null);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (tts != null)
-            tts.shutdown();
-        if (speechRecognizer != null)
-            speechRecognizer.destroy();
+        mainHandler.removeCallbacksAndMessages(null);
+        if (tts != null) { tts.shutdown(); tts = null; }
+        if (speechRecognizer != null) { speechRecognizer.destroy(); speechRecognizer = null; }
     }
 }
