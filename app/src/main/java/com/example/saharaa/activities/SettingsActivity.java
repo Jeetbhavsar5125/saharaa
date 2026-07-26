@@ -2,11 +2,10 @@ package com.example.saharaa.activities;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.saharaa.R;
 import com.example.saharaa.utils.AppPrefs;

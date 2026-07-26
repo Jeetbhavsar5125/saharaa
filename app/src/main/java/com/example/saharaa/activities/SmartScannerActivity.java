@@ -431,7 +431,32 @@ public class SmartScannerActivity extends BaseVoiceActivity {
         if (scanMode == 1) {
             scanBarcode(image, imageProxy);
         } else {
-            scanText(image, imageProxy);
+            // Hybrid scan in Object mode: search for Barcode first, then Text
+            barcodeScanner.process(image)
+                    .addOnSuccessListener(barcodes -> {
+                        boolean foundBarcode = false;
+                        for (Barcode barcode : barcodes) {
+                            if (barcode.getRawValue() != null) {
+                                isScanning = false;
+                                foundBarcode = true;
+                                HapticHelper.success(this);
+                                fetchProductFromBarcode(barcode.getRawValue());
+                                break;
+                            }
+                        }
+                        if (!foundBarcode && isScanning) {
+                            scanText(image, imageProxy);
+                        } else {
+                            imageProxy.close();
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        if (isScanning) {
+                            scanText(image, imageProxy);
+                        } else {
+                            imageProxy.close();
+                        }
+                    });
         }
     }
 
@@ -445,17 +470,17 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                         if (barcode.getRawValue() != null) {
                             isScanning = false;
                             found = true;
-                            HapticHelper.success(this); // P3-1: double-pulse on found
+                            HapticHelper.success(this);
                             fetchProductFromBarcode(barcode.getRawValue());
                             break;
                         }
                     }
                     if (!found && isScanning
-                            && (System.currentTimeMillis() - scanStartTime > 6000)) {
+                            && (System.currentTimeMillis() - scanStartTime > 8000)) {
                         isScanning = false;
-                        HapticHelper.failure(this); // P3-1: triple-pulse on not found
+                        HapticHelper.failure(this);
                         runOnUiThread(() -> {
-                            speak("No barcode found. Press volume up or say scan to try again.",
+                            speak("No barcode detected. Please adjust lighting or move closer, then tap scan.",
                                     "RESULT_PROMPT");
                             showIdlePanel();
                         });
@@ -475,10 +500,10 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                                    @NonNull Response<ProductResponse> response) {
                 runOnUiThread(() -> {
                     if (response.isSuccessful() && response.body() != null
-                            && response.body().status == 1) {
+                            && response.body().status == 1 && response.body().product != null) {
                         ProductResponse.Product p = response.body().product;
 
-                        String name        = p.productName     != null ? p.productName     : "Unknown Product";
+                        String name        = p.productName     != null && !p.productName.isEmpty() ? p.productName     : "Product " + code;
                         String brand       = p.brands          != null ? p.brands          : "";
                         String ingredients = p.ingredientsText != null ? p.ingredientsText : "";
                         String calories    = p.nutriments != null && p.nutriments.energyKcal != null
@@ -495,6 +520,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                         String[][] rows = {
                                 {"Product",     name},
                                 {"Brand",       brand},
+                                {"Barcode",     code},
                                 {"Calories",    calories},
                                 {"Ingredients", ingredients.length() > 120
                                         ? ingredients.substring(0, 120) + "…" : ingredients},
@@ -507,8 +533,19 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                         showProductResult(name, "📦 Barcode Scan", rows, record);
 
                     } else {
-                        speak("Product not found. Say scan again or back.", "RESULT_PROMPT");
-                        showIdlePanel();
+                        // Fallback result card for valid barcode not in OpenFoodFacts database
+                        String name = "Barcode: " + code;
+                        String voiceMsg = "Barcode scanned: " + code + ". Product details not found in online database. Say scan again or save.";
+                        speak(voiceMsg, "RESULT_PROMPT");
+
+                        String[][] rows = {
+                                {"Barcode Code", code},
+                                {"Database Status", "Not found in OpenFoodFacts database"}
+                        };
+
+                        ScanRecord record = new ScanRecord(
+                                ScanRecord.TYPE_BARCODE, name, "Scanned Barcode", null, null, code);
+                        showProductResult(name, "📦 Barcode Scan", rows, record);
                     }
                 });
             }
@@ -516,8 +553,18 @@ public class SmartScannerActivity extends BaseVoiceActivity {
             @Override
             public void onFailure(@NonNull Call<ProductResponse> call, @NonNull Throwable t) {
                 runOnUiThread(() -> {
-                    speak("Network error. Say scan again or back.", "RESULT_PROMPT");
-                    showIdlePanel();
+                    String name = "Barcode: " + code;
+                    String voiceMsg = "Barcode scanned: " + code + ". Network error while fetching details. Say scan again or back.";
+                    speak(voiceMsg, "RESULT_PROMPT");
+
+                    String[][] rows = {
+                            {"Barcode Code", code},
+                            {"Network Status", "Offline / Network Error"}
+                    };
+
+                    ScanRecord record = new ScanRecord(
+                            ScanRecord.TYPE_BARCODE, name, "Offline Scan", null, null, code);
+                    showProductResult(name, "📦 Barcode Scan", rows, record);
                 });
             }
         });
@@ -532,12 +579,16 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     }
 
     private void processTextResult(Text text) {
+        if (!isScanning) return;
+
         String rawText = text.getText();
         String price   = InfoParser.extractPrice(rawText);
         String expiry  = InfoParser.extractExpiryDate(rawText);
 
         if (price != null || expiry != null) {
             isScanning = false;
+            HapticHelper.success(this);
+
             StringBuilder voiceMsg = new StringBuilder();
             if (price  != null) voiceMsg.append("Price: ").append(price).append(" rupees. ");
             if (expiry != null) voiceMsg.append("Expiry: ").append(expiry).append(". ");
@@ -559,21 +610,28 @@ public class SmartScannerActivity extends BaseVoiceActivity {
 
         } else {
             String largestBlock = getLargestTextBlock(text);
-            if (largestBlock != null && largestBlock.length() > 5) {
-                if (System.currentTimeMillis() - scanStartTime > 4000) {
-                    isScanning = false;
-                    String msg = "Found text: " + largestBlock + ". Say: scan again, save, or back.";
-                    speak(msg, "RESULT_PROMPT");
-                    String[][] rows = {{"Text Found", largestBlock}};
-                    ScanRecord record = new ScanRecord(
-                            ScanRecord.TYPE_TEXT, largestBlock, null, null, null, largestBlock);
-                    runOnUiThread(() -> showProductResult(
-                            "Text Detected", "📝 Text Scan", rows, record));
-                }
-            } else if (isScanning && (System.currentTimeMillis() - scanStartTime > 6000)) {
+            long elapsed = System.currentTimeMillis() - scanStartTime;
+
+            if (largestBlock != null && largestBlock.length() > 3 && elapsed > 1200) {
                 isScanning = false;
+                HapticHelper.success(this);
+
+                String msg = "Found text: " + largestBlock + ". Say: scan again, save, or back.";
+                speak(msg, "RESULT_PROMPT");
+                String[][] rows = {
+                        {"Detected Text", largestBlock},
+                        {"Full Output", rawText.length() > 150 ? rawText.substring(0, 150) + "…" : rawText}
+                };
+                ScanRecord record = new ScanRecord(
+                        ScanRecord.TYPE_TEXT, largestBlock, null, null, null, rawText);
+                runOnUiThread(() -> showProductResult(
+                        "Text Detected", "📝 Object / Text Scan", rows, record));
+
+            } else if (isScanning && elapsed > 7000) {
+                isScanning = false;
+                HapticHelper.failure(this);
                 runOnUiThread(() -> {
-                    speak("No text found. Say scan again or back.", "RESULT_PROMPT");
+                    speak("No readable text found. Hold camera steady and try again.", "RESULT_PROMPT");
                     showIdlePanel();
                 });
             }
@@ -586,7 +644,10 @@ public class SmartScannerActivity extends BaseVoiceActivity {
         for (Text.TextBlock block : text.getTextBlocks()) {
             if (block.getBoundingBox() != null) {
                 int area = block.getBoundingBox().width() * block.getBoundingBox().height();
-                if (area > maxArea) { maxArea = area; largest = block.getText(); }
+                if (area > maxArea && block.getText().trim().length() > 3) {
+                    maxArea = area;
+                    largest = block.getText().trim();
+                }
             }
         }
         return largest;

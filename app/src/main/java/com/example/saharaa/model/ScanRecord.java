@@ -3,6 +3,7 @@ package com.example.saharaa.model;
 import androidx.annotation.NonNull;
 import androidx.room.ColumnInfo;
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 /**
@@ -43,6 +44,7 @@ public class ScanRecord {
     public ScanRecord() {}
 
     /** Convenience constructor (no-id, used everywhere we create a new record). */
+    @Ignore
     public ScanRecord(String type, String title, String brand,
                       String calories, String ingredients, String rawText) {
         this.type        = type;

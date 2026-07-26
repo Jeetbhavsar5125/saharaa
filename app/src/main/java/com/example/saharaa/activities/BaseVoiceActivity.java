@@ -24,18 +24,9 @@ import java.util.Locale;
 
 /**
  * Abstract base class providing shared TTS + STT boilerplate for all voice-enabled screens.
- *
- * Subclasses MUST implement:
- *   - {@link #getWelcomeMessage()} — spoken when the screen opens (blind mode only)
- *   - {@link #processCommand(String)} — handle recognized voice commands
- *
- * Subclasses MAY override:
- *   - {@link #onTtsReady()} — called once TTS initialises (on main thread), before welcome is spoken
- *   - {@link #getLoopBackIds()} — TTS utterance IDs after which STT should auto-restart
  */
 public abstract class BaseVoiceActivity extends AppCompatActivity {
 
-    // ─── Voice fields (shared across all activities) ───────────────────────────
     protected TextToSpeech     tts;
     protected SpeechRecognizer speechRecognizer;
     protected Intent           speechIntent;
@@ -47,29 +38,17 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
 
     protected final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    // ─── Abstract interface ────────────────────────────────────────────────────
+    protected int consecutiveErrors = 0;
 
-    /** Returns the TTS message spoken when the screen opens (blind mode). */
     protected abstract String getWelcomeMessage();
-
-    /** Handles a recognised voice command. */
     protected abstract void processCommand(String command);
 
-    /**
-     * Returns the set of TTS utterance IDs after which STT should automatically restart.
-     * Defaults to: WELCOME, LOOP_RETRY, MANUAL.
-     */
     protected String[] getLoopBackIds() {
-        return new String[]{"WELCOME", "LOOP_RETRY", "MANUAL"};
+        return new String[]{"WELCOME", "LOOP_RETRY", "MANUAL", "READY", "RESULT_PROMPT", "SAVED"};
     }
 
-    /** Called on the main thread once TTS is initialised, before welcome is spoken. */
     protected void onTtsReady() {}
-
-    /** Called on the main thread whenever STT listening state changes (for UI status banners). */
     protected void onListeningStateChanged(boolean isListening) {}
-
-    // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,9 +68,10 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         isActivityActive = true;
+        consecutiveErrors = 0;
         if (speechRecognizer == null) initSpeechRecognizer();
-        if (isBlindUser && ttsReady && !isListening) {
-            mainHandler.postDelayed(this::startListeningNow, 300L);
+        if (isBlindUser && ttsReady && !isListening && (tts == null || !tts.isSpeaking())) {
+            mainHandler.postDelayed(this::startListeningNow, 800L);
         }
     }
 
@@ -99,44 +79,44 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         isActivityActive = false;
+        mainHandler.removeCallbacksAndMessages(null);
         if (tts != null) tts.stop();
         if (speechRecognizer != null) {
-            speechRecognizer.stopListening();
-            speechRecognizer.cancel();
+            try {
+                speechRecognizer.stopListening();
+                speechRecognizer.cancel();
+            } catch (Exception ignored) {}
             isListening = false;
         }
-        mainHandler.removeCallbacksAndMessages(null);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         mainHandler.removeCallbacksAndMessages(null);
-        if (tts != null) { tts.shutdown(); tts = null; }
-        if (speechRecognizer != null) { speechRecognizer.destroy(); speechRecognizer = null; }
+        if (tts != null) { tts.stop(); tts.shutdown(); tts = null; }
+        if (speechRecognizer != null) {
+            try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+            speechRecognizer = null;
+        }
     }
-
-    // ─── TTS init ──────────────────────────────────────────────────────────────
 
     private void initTts(String lang) {
         tts = new TextToSpeech(this, status -> {
             if (status != TextToSpeech.SUCCESS) return;
             Locale locale = LocaleUtils.resolve(lang);
-            int result = tts.setLanguage(locale);
+            tts.setLanguage(locale);
             float rate = getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
                     .getFloat(AppPrefs.KEY_SPEECH_RATE, 0.9f);
             tts.setSpeechRate(rate);
 
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts.setLanguage(Locale.US);
-            }
             ttsReady = true;
-
             tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override public void onStart(String id) {}
                 @Override public void onDone(String id) {
+                    consecutiveErrors = 0;
                     if (isBlindUser && isActivityActive && isLoopBackId(id)) {
-                        mainHandler.post(BaseVoiceActivity.this::startListeningNow);
+                        mainHandler.postDelayed(BaseVoiceActivity.this::startListeningNow, 800L);
                     }
                 }
                 @Override public void onError(String id) {}
@@ -144,9 +124,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
                 onTtsReady();
-                if (isBlindUser) {
-                    speak(getWelcomeMessage(), "WELCOME");
-                }
+                if (isBlindUser) speak(getWelcomeMessage(), "WELCOME");
             });
         });
     }
@@ -158,10 +136,11 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
         return false;
     }
 
-    // ─── STT init ──────────────────────────────────────────────────────────────
-
     protected void initSpeechRecognizer() {
-        if (speechRecognizer != null) { speechRecognizer.destroy(); speechRecognizer = null; }
+        if (speechRecognizer != null) {
+            try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+            speechRecognizer = null;
+        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) return;
 
@@ -179,20 +158,24 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
             public void onError(int error) {
                 setListeningState(false);
                 if (!isActivityActive || !isBlindUser) return;
-                long delay = (error == SpeechRecognizer.ERROR_NO_MATCH
-                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 0L : 300L;
-                mainHandler.postDelayed(BaseVoiceActivity.this::startListeningNow, delay);
+
+                consecutiveErrors++;
+                if (consecutiveErrors > 3) {
+                    // Stop aggressive auto-listening retry loop if failing repeatedly
+                    return;
+                }
+                mainHandler.postDelayed(BaseVoiceActivity.this::startListeningNow, 1500L);
             }
 
             @Override
             public void onResults(Bundle results) {
                 setListeningState(false);
-                ArrayList<String> matches =
-                        results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                consecutiveErrors = 0;
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
                     processCommand(matches.get(0).toLowerCase());
                 } else if (isActivityActive && isBlindUser) {
-                    startListeningNow();
+                    mainHandler.postDelayed(BaseVoiceActivity.this::startListeningNow, 1000L);
                 }
             }
         });
@@ -200,40 +183,57 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
 
     private void buildSpeechIntent() {
         speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L);
     }
-
-    // ─── Public helpers ────────────────────────────────────────────────────────
 
     private void setListeningState(boolean listening) {
         this.isListening = listening;
         runOnUiThread(() -> onListeningStateChanged(listening));
     }
 
-    /** Set speech rate dynamically (e.g. 0.75f = slow, 1.0f = normal, 1.25f = fast). */
     protected void setSpeechRate(float rate) {
         getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
                 .edit().putFloat(AppPrefs.KEY_SPEECH_RATE, rate).apply();
-        if (tts != null && ttsReady) {
-            tts.setSpeechRate(rate);
-        }
+        if (tts != null && ttsReady) tts.setSpeechRate(rate);
     }
 
-    /** Speak text. Safe to call at any time — no-ops if TTS not ready. */
     protected void speak(String text, String id) {
         if (tts == null || !ttsReady) return;
+        // Stop any active STT listening when TTS speaks to avoid microphone recording TTS output
+        stopListeningImmediate();
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id);
     }
 
-    /** Cancel any stale STT session and start listening immediately. */
+    protected void stopListeningImmediate() {
+        mainHandler.removeCallbacksAndMessages(null);
+        if (speechRecognizer != null && isListening) {
+            try {
+                speechRecognizer.stopListening();
+                speechRecognizer.cancel();
+            } catch (Exception ignored) {}
+            setListeningState(false);
+        }
+    }
+
     protected void startListeningNow() {
+        consecutiveErrors = 0;
         if (!isActivityActive || speechRecognizer == null || speechIntent == null) return;
-        if (isListening) { speechRecognizer.cancel(); isListening = false; }
-        runOnUiThread(() -> speechRecognizer.startListening(speechIntent));
+        if (tts != null && tts.isSpeaking()) return; // Never listen while TTS is speaking!
+
+        if (isListening) {
+            try { speechRecognizer.cancel(); } catch (Exception ignored) {}
+            isListening = false;
+        }
+        runOnUiThread(() -> {
+            try {
+                speechRecognizer.startListening(speechIntent);
+            } catch (Exception e) {
+                initSpeechRecognizer();
+            }
+        });
     }
 }

@@ -40,20 +40,30 @@ public final class HapticHelper {
 
     @SuppressWarnings("deprecation")
     private static void vibrate(Context context, long[] pattern) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            VibratorManager vm = (VibratorManager) context.getSystemService(
-                    Context.VIBRATOR_MANAGER_SERVICE);
-            if (vm == null) return;
-            Vibrator v = vm.getDefaultVibrator();
-            v.vibrate(VibrationEffect.createWaveform(pattern, -1));
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-            if (v == null) return;
-            v.vibrate(VibrationEffect.createWaveform(pattern, -1));
-        } else {
-            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-            if (v == null) return;
-            v.vibrate(pattern, -1);
+        if (context == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager vm = (VibratorManager) context.getSystemService(
+                        Context.VIBRATOR_MANAGER_SERVICE);
+                if (vm != null) {
+                    Vibrator v = vm.getDefaultVibrator();
+                    if (v != null && v.hasVibrator()) {
+                        v.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                    }
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                if (v != null && v.hasVibrator()) {
+                    v.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                }
+            } else {
+                Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                if (v != null && v.hasVibrator()) {
+                    v.vibrate(pattern, -1);
+                }
+            }
+        } catch (Throwable t) {
+            android.util.Log.w("HapticHelper", "Vibration failed safely: " + t.getMessage());
         }
     }
 }

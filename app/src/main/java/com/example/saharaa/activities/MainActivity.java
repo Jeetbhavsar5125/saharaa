@@ -2,6 +2,7 @@ package com.example.saharaa.activities;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Toast;
 
@@ -83,10 +84,10 @@ public class MainActivity extends BaseVoiceActivity {
 
         // Back handler
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override public void handleOnBackPressed() { finishAffinity(); }
+            @Override public void handleOnBackPressed() { moveTaskToBack(true); }
         });
 
-        // Click listeners (with haptic feedback for elderly users)
+        // Click listeners (with safe haptic feedback for elderly users)
         btnScanObject.setOnClickListener(v  -> { HapticHelper.tap(this); openObjectScanner(); });
         btnScanBarcode.setOnClickListener(v -> { HapticHelper.tap(this); openBarcodeScanner(); });
         btnHistory.setOnClickListener(v     -> { HapticHelper.tap(this); openHistory(); });
@@ -98,8 +99,10 @@ public class MainActivity extends BaseVoiceActivity {
 
         View btnSettings = findViewById(R.id.btnSettings);
         if (btnSettings != null) {
-            btnSettings.setOnClickListener(v ->
-                    startActivity(new Intent(this, SettingsActivity.class)));
+            btnSettings.setOnClickListener(v -> {
+                HapticHelper.tap(this);
+                startActivity(new Intent(this, SettingsActivity.class));
+            });
         }
 
         shakeDetector = new ShakeDetector(this, () -> {

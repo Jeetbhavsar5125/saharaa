@@ -102,9 +102,7 @@ public class AccessibilityModeActivity extends AppCompatActivity {
             public void onError(int error) {
                 isListening = false;
                 if (!isActivityActive || !waitingForInput) return;
-                long delay = (error == SpeechRecognizer.ERROR_NO_MATCH
-                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 0L : 300L;
-                mainHandler.postDelayed(() -> startListeningNow(), delay);
+                mainHandler.postDelayed(AccessibilityModeActivity.this::startListeningNow, 1200L);
             }
 
             @Override
@@ -114,16 +112,24 @@ public class AccessibilityModeActivity extends AppCompatActivity {
                 if (matches != null && !matches.isEmpty()) {
                     processVoiceResult(matches.get(0).toLowerCase());
                 } else if (isActivityActive && waitingForInput) {
-                    startListeningNow();
+                    mainHandler.postDelayed(AccessibilityModeActivity.this::startListeningNow, 800L);
                 }
             }
         });
     }
 
     private void startListeningNow() {
-        if (!isActivityActive || speechRecognizer == null) return;
-        if (isListening) { speechRecognizer.cancel(); isListening = false; }
-        runOnUiThread(() -> speechRecognizer.startListening(speechIntent));
+        if (!isActivityActive || speechRecognizer == null || speechIntent == null) return;
+        if (tts != null && tts.isSpeaking()) return; // Don't listen while speaking
+        if (isListening) {
+            try { speechRecognizer.cancel(); } catch (Exception ignored) {}
+            isListening = false;
+        }
+        runOnUiThread(() -> {
+            try {
+                speechRecognizer.startListening(speechIntent);
+            } catch (Exception ignored) {}
+        });
     }
 
     private void processVoiceResult(String text) {
@@ -168,6 +174,14 @@ public class AccessibilityModeActivity extends AppCompatActivity {
 
     private void speak(String text, String id) {
         if (tts == null || !ttsReady) return;
+        mainHandler.removeCallbacksAndMessages(null);
+        if (speechRecognizer != null && isListening) {
+            try {
+                speechRecognizer.stopListening();
+                speechRecognizer.cancel();
+            } catch (Exception ignored) {}
+            isListening = false;
+        }
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id);
     }
 
