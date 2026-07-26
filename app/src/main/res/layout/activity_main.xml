@@ -30,25 +30,25 @@
 
         <ImageView
             android:id="@+id/btnSettings"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:background="@drawable/bg_search_pill"
             android:backgroundTint="@color/surface_brown_light"
-            android:padding="12dp"
+            android:padding="14dp"
             android:src="@android:drawable/ic_menu_preferences"
             app:tint="@color/brown_primary_dark"
             android:contentDescription="Settings"
             android:clickable="true"
             android:focusable="true"
-            android:layout_marginEnd="8dp"/>
+            android:layout_marginEnd="12dp"/>
 
         <ImageView
             android:id="@+id/btnHistory"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:background="@drawable/bg_search_pill"
             android:backgroundTint="@color/surface_brown_light"
-            android:padding="12dp"
+            android:padding="14dp"
             android:src="@drawable/ic_history_clock"
             app:tint="@color/brown_primary_dark"
             android:contentDescription="History"
@@ -165,5 +165,25 @@
         android:contentDescription="Tap to Speak"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Voice Status Banner -->
+    <TextView
+        android:id="@+id/tvVoiceStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🎤 Listening..."
+        android:textColor="@color/white"
+        android:textSize="14sp"
+        android:background="@drawable/bg_search_pill"
+        android:backgroundTint="#80000000"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="32dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

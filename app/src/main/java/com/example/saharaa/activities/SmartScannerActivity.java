@@ -30,8 +30,10 @@ import com.example.saharaa.model.ScanRecord;
 import com.example.saharaa.network.OpenFoodFactsApi;
 import com.example.saharaa.network.ProductResponse;
 import com.example.saharaa.network.RetrofitClient;
+import com.example.saharaa.utils.HapticHelper;
 import com.example.saharaa.utils.HistoryManager;
 import com.example.saharaa.utils.InfoParser;
+import com.example.saharaa.utils.ShakeDetector;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.barcode.BarcodeScanner;
 import com.google.mlkit.vision.barcode.BarcodeScanning;
@@ -73,7 +75,9 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     // ─── Camera ────────────────────────────────────────────────────────────────
     private ExecutorService       cameraExecutor;
     private ProcessCameraProvider cameraProvider;
+    private androidx.camera.core.Camera camera; // kept for torch control
     private boolean isScanning    = false;
+    private boolean torchOn       = false;
     private long    scanStartTime = 0;
 
     // ─── ML Kit ────────────────────────────────────────────────────────────────
@@ -83,6 +87,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
 
     // ─── State ─────────────────────────────────────────────────────────────────
     private ScanRecord pendingRecord = null;
+    private ShakeDetector shakeDetector;
 
     // ─── BaseVoiceActivity contract ────────────────────────────────────────────
 
@@ -105,7 +110,10 @@ public class SmartScannerActivity extends BaseVoiceActivity {
 
     @Override
     protected void processCommand(String command) {
-        if (command.contains("scan") || command.contains("capture") || command.contains("read")) {
+        if (command.contains("help")) {
+            speak("Scanner help. Say: scan to capture. Save for history. Again to rescan. "
+                    + "Light on or light off for flashlight. Back to exit.", "LOOP_RETRY");
+        } else if (command.contains("scan") || command.contains("capture") || command.contains("read")) {
             speak("Scanning now.", "SCANNING");
             startScanningProcess();
         } else if (command.contains("save") || command.contains("history")) {
@@ -122,11 +130,19 @@ public class SmartScannerActivity extends BaseVoiceActivity {
             }
         } else if (command.contains("again") || command.contains("retry") || command.contains("reset")) {
             resetToIdle();
+        } else if (command.contains("light") || command.contains("torch") || command.contains("flash")) {
+            if (command.contains("off") || (torchOn && !command.contains("on"))) {
+                setTorch(false);
+                speak("Flashlight off.", "LOOP_RETRY");
+            } else {
+                setTorch(true);
+                speak("Flashlight on.", "LOOP_RETRY");
+            }
         } else if (command.contains("back") || command.contains("exit") || command.contains("close")) {
             speak("Going back.", "EXIT");
             finish();
         } else {
-            speak("Say: scan to capture, save for history, again to rescan, or back.", "LOOP_RETRY");
+            speak("Say: scan, save, again, light on or off, or back.", "LOOP_RETRY");
         }
     }
 
@@ -197,16 +213,24 @@ public class SmartScannerActivity extends BaseVoiceActivity {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.CAMERA}, PERMISSION_CODE);
         }
+
+        shakeDetector = new ShakeDetector(this, () -> {
+            if (!isScanning) {
+                startScanningProcess();
+            }
+        });
     }
 
     @Override
     protected void onResume() {
         super.onResume(); // BaseVoiceActivity restarts STT
+        if (shakeDetector != null) shakeDetector.start();
     }
 
     @Override
     protected void onPause() {
         super.onPause(); // BaseVoiceActivity stops TTS/STT
+        if (shakeDetector != null) shakeDetector.stop();
     }
 
     @Override
@@ -255,6 +279,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     private void startScanningProcess() {
         isScanning    = true;
         scanStartTime = System.currentTimeMillis();
+        HapticHelper.scanStart(this); // P3-1: 1-pulse haptic
         showLoadingPanel();
         speak("Scanning. Please hold steady.", "SCANNING");
     }
@@ -369,8 +394,9 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                 imageAnalysis.setAnalyzer(cameraExecutor, this::analyzeFrame);
 
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview, imageAnalysis);
+                // Keep camera reference for torch control
+                camera = cameraProvider.bindToLifecycle(this,
+                        CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis);
             } catch (ExecutionException | InterruptedException e) {
                 Log.e(TAG, "Camera start failed", e);
             }
@@ -383,6 +409,14 @@ public class SmartScannerActivity extends BaseVoiceActivity {
 
     private void resumeCamera() {
         startCamera();
+    }
+
+    /** Toggle the camera flashlight. Safe no-op if device has no torch. */
+    private void setTorch(boolean on) {
+        if (camera != null) {
+            camera.getCameraControl().enableTorch(on);
+            torchOn = on;
+        }
     }
 
     @OptIn(markerClass = ExperimentalGetImage.class)
@@ -411,6 +445,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                         if (barcode.getRawValue() != null) {
                             isScanning = false;
                             found = true;
+                            HapticHelper.success(this); // P3-1: double-pulse on found
                             fetchProductFromBarcode(barcode.getRawValue());
                             break;
                         }
@@ -418,6 +453,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                     if (!found && isScanning
                             && (System.currentTimeMillis() - scanStartTime > 6000)) {
                         isScanning = false;
+                        HapticHelper.failure(this); // P3-1: triple-pulse on not found
                         runOnUiThread(() -> {
                             speak("No barcode found. Press volume up or say scan to try again.",
                                     "RESULT_PROMPT");

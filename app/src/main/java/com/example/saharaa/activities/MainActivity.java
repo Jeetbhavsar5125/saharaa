@@ -2,7 +2,6 @@ package com.example.saharaa.activities;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Toast;
 
@@ -13,6 +12,8 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.example.saharaa.R;
+import com.example.saharaa.utils.HapticHelper;
+import com.example.saharaa.utils.ShakeDetector;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 public class MainActivity extends BaseVoiceActivity {
@@ -20,9 +21,11 @@ public class MainActivity extends BaseVoiceActivity {
     // UI
     private View btnScanObject, btnScanBarcode, btnHistory;
     private FloatingActionButton fabMic;
+    private View tvVoiceStatus;
 
     // Track if we returned from a child screen (for re-announce on resume)
     private boolean wasEverPaused = false;
+    private ShakeDetector shakeDetector;
 
     // ─── BaseVoiceActivity contract ────────────────────────────────────────────
 
@@ -33,7 +36,12 @@ public class MainActivity extends BaseVoiceActivity {
 
     @Override
     protected void processCommand(String command) {
-        if (command.contains("object") || command.contains("product") || command.contains("item")
+        if (command.contains("help")) {
+            speak("Main menu help. Say: scan product to identify items. "
+                    + "Say barcode to scan a barcode. "
+                    + "Say history to see past scans. "
+                    + "Say settings to open settings.", "LOOP_RETRY");
+        } else if (command.contains("object") || command.contains("product") || command.contains("item")
                 || (command.contains("scan") && !command.contains("barcode"))) {
             speak("Opening scanner.", "NAV");
             openObjectScanner();
@@ -47,7 +55,7 @@ public class MainActivity extends BaseVoiceActivity {
             speak("Opening settings.", "NAV");
             startActivity(new Intent(this, SettingsActivity.class));
         } else {
-            speak("Say: scan product, barcode, history, or settings.", "LOOP_RETRY");
+            speak("Say: scan product, barcode, history, or settings. Say help for all commands.", "LOOP_RETRY");
         }
     }
 
@@ -64,6 +72,7 @@ public class MainActivity extends BaseVoiceActivity {
         btnScanBarcode = findViewById(R.id.btnScanBarcode);
         btnHistory     = findViewById(R.id.btnHistory);
         fabMic         = findViewById(R.id.fabMic);
+        tvVoiceStatus  = findViewById(R.id.tvVoiceStatus);
 
         // Edge-to-edge
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -77,11 +86,12 @@ public class MainActivity extends BaseVoiceActivity {
             @Override public void handleOnBackPressed() { finishAffinity(); }
         });
 
-        // Click listeners
-        btnScanObject.setOnClickListener(v  -> openObjectScanner());
-        btnScanBarcode.setOnClickListener(v -> openBarcodeScanner());
-        btnHistory.setOnClickListener(v     -> openHistory());
+        // Click listeners (with haptic feedback for elderly users)
+        btnScanObject.setOnClickListener(v  -> { HapticHelper.tap(this); openObjectScanner(); });
+        btnScanBarcode.setOnClickListener(v -> { HapticHelper.tap(this); openBarcodeScanner(); });
+        btnHistory.setOnClickListener(v     -> { HapticHelper.tap(this); openHistory(); });
         fabMic.setOnClickListener(v -> {
+            HapticHelper.tap(this);
             speak("Listening", "MANUAL");
             startListeningNow();
         });
@@ -91,11 +101,24 @@ public class MainActivity extends BaseVoiceActivity {
             btnSettings.setOnClickListener(v ->
                     startActivity(new Intent(this, SettingsActivity.class)));
         }
+
+        shakeDetector = new ShakeDetector(this, () -> {
+            HapticHelper.scanStart(this);
+            openObjectScanner();
+        });
+    }
+
+    @Override
+    protected void onListeningStateChanged(boolean isListening) {
+        if (tvVoiceStatus != null) {
+            tvVoiceStatus.setVisibility(isListening ? View.VISIBLE : View.GONE);
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume(); // handles STT restart
+        if (shakeDetector != null) shakeDetector.start();
         if (isBlindUser && ttsReady && wasEverPaused) {
             speak("Saharaa. Say: scan product, barcode, history, or settings.", "WELCOME");
         }
@@ -105,6 +128,7 @@ public class MainActivity extends BaseVoiceActivity {
     @Override
     protected void onPause() {
         super.onPause(); // handles TTS/STT cleanup
+        if (shakeDetector != null) shakeDetector.stop();
         wasEverPaused = true;
     }
 

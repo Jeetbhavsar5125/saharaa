@@ -35,6 +35,7 @@ public class HistoryActivity extends BaseVoiceActivity {
     private TextView tvTotalScans, tvBarcodeCount;
     private HistoryAdapter adapter;
     private List<ScanRecord> records = new ArrayList<>();
+    private int currentHistoryIndex = -1;
 
     private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
     private final Handler        uiHandler  = new Handler(Looper.getMainLooper());
@@ -61,8 +62,16 @@ public class HistoryActivity extends BaseVoiceActivity {
         } else if (command.contains("clear") || command.contains("delete") || command.contains("wipe")) {
             clearHistory();
             speak("History cleared.", "LOOP_RETRY");
+        } else if (command.contains("next")) {
+            readNextItem();
+        } else if (command.contains("previous") || command.contains("prev") || command.contains("backwards")) {
+            readPreviousItem();
+        } else if (command.contains("read") || command.contains("repeat") || command.contains("item")) {
+            readCurrentItem();
+        } else if (command.contains("help")) {
+            speak("History help. Say next to read next scan. Say previous to read previous scan. Say read to repeat item. Say clear to delete history. Say back to exit.", "LOOP_RETRY");
         } else {
-            speak("Say back to go back, or clear to clear history.", "LOOP_RETRY");
+            speak("Say next, previous, read, clear, or back.", "LOOP_RETRY");
         }
     }
 
@@ -134,8 +143,62 @@ public class HistoryActivity extends BaseVoiceActivity {
     private void clearHistory() {
         HistoryManager.clearAll(this);
         records.clear();
+        currentHistoryIndex = -1;
         adapter.notifyDataSetChanged();
         updateUI();
+    }
+
+    private void readNextItem() {
+        if (records.isEmpty()) {
+            speak("No scans in history.", "LOOP_RETRY");
+            return;
+        }
+        if (currentHistoryIndex < records.size() - 1) {
+            currentHistoryIndex++;
+            speakItemAtIndex(currentHistoryIndex);
+        } else {
+            speak("Reached the end of history list.", "LOOP_RETRY");
+        }
+    }
+
+    private void readPreviousItem() {
+        if (records.isEmpty()) {
+            speak("No scans in history.", "LOOP_RETRY");
+            return;
+        }
+        if (currentHistoryIndex > 0) {
+            currentHistoryIndex--;
+            speakItemAtIndex(currentHistoryIndex);
+        } else {
+            speak("Already at the first item.", "LOOP_RETRY");
+        }
+    }
+
+    private void readCurrentItem() {
+        if (records.isEmpty()) {
+            speak("No scans in history.", "LOOP_RETRY");
+            return;
+        }
+        if (currentHistoryIndex < 0) currentHistoryIndex = 0;
+        speakItemAtIndex(currentHistoryIndex);
+    }
+
+    private void speakItemAtIndex(int index) {
+        if (index < 0 || index >= records.size()) return;
+        ScanRecord r = records.get(index);
+        recyclerHistory.smoothScrollToPosition(index);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Item ").append(index + 1).append(" of ").append(records.size()).append(". ");
+        sb.append(r.type != null ? r.type : "Scan").append(". ");
+        if (r.title != null && !r.title.isEmpty()) sb.append(r.title).append(". ");
+        if (r.brand != null && !r.brand.isEmpty()) sb.append("Brand: ").append(r.brand).append(". ");
+        if (r.calories != null && !r.calories.isEmpty()) sb.append(r.calories).append(". ");
+        if (r.rawText != null && !r.rawText.isEmpty() && (r.title == null || r.title.isEmpty())) {
+            sb.append(r.rawText).append(". ");
+        }
+
+        speak(sb.toString(), "LOOP_RETRY");
     }
 
     @Override

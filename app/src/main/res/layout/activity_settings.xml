@@ -145,6 +145,61 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Speech Speed Card -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/btnChangeSpeechRate"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardCornerRadius="16dp"
+                app:cardBackgroundColor="#5D4037"
+                app:cardElevation="4dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp">
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@android:drawable/ic_btn_speak_now"
+                        app:tint="@color/white"
+                        android:contentDescription="Speech Speed"/>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="16dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Voice Speed"
+                            android:textColor="@color/white"
+                            android:textSize="17sp"
+                            android:textStyle="bold"/>
+                        <TextView
+                            android:id="@+id/tvCurrentSpeed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Normal (0.9x)"
+                            android:textColor="#D7CCC8"
+                            android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="#D7CCC8"
+                        android:textSize="22sp"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- Login/Register Card -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/btnLoginRegister"

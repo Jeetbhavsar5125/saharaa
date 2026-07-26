@@ -66,6 +66,9 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
     /** Called on the main thread once TTS is initialised, before welcome is spoken. */
     protected void onTtsReady() {}
 
+    /** Called on the main thread whenever STT listening state changes (for UI status banners). */
+    protected void onListeningStateChanged(boolean isListening) {}
+
     // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
     @Override
@@ -120,6 +123,10 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
             if (status != TextToSpeech.SUCCESS) return;
             Locale locale = LocaleUtils.resolve(lang);
             int result = tts.setLanguage(locale);
+            float rate = getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
+                    .getFloat(AppPrefs.KEY_SPEECH_RATE, 0.9f);
+            tts.setSpeechRate(rate);
+
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts.setLanguage(Locale.US);
             }
@@ -160,17 +167,17 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
 
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         speechRecognizer.setRecognitionListener(new RecognitionListener() {
-            @Override public void onReadyForSpeech(Bundle p) { isListening = true; }
+            @Override public void onReadyForSpeech(Bundle p) { setListeningState(true); }
             @Override public void onBeginningOfSpeech() {}
             @Override public void onRmsChanged(float r) {}
             @Override public void onBufferReceived(byte[] b) {}
-            @Override public void onEndOfSpeech() { isListening = false; }
+            @Override public void onEndOfSpeech() { setListeningState(false); }
             @Override public void onPartialResults(Bundle b) {}
             @Override public void onEvent(int e, Bundle b) {}
 
             @Override
             public void onError(int error) {
-                isListening = false;
+                setListeningState(false);
                 if (!isActivityActive || !isBlindUser) return;
                 long delay = (error == SpeechRecognizer.ERROR_NO_MATCH
                         || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 0L : 300L;
@@ -179,7 +186,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
 
             @Override
             public void onResults(Bundle results) {
-                isListening = false;
+                setListeningState(false);
                 ArrayList<String> matches =
                         results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
@@ -202,6 +209,20 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
     }
 
     // ─── Public helpers ────────────────────────────────────────────────────────
+
+    private void setListeningState(boolean listening) {
+        this.isListening = listening;
+        runOnUiThread(() -> onListeningStateChanged(listening));
+    }
+
+    /** Set speech rate dynamically (e.g. 0.75f = slow, 1.0f = normal, 1.25f = fast). */
+    protected void setSpeechRate(float rate) {
+        getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
+                .edit().putFloat(AppPrefs.KEY_SPEECH_RATE, rate).apply();
+        if (tts != null && ttsReady) {
+            tts.setSpeechRate(rate);
+        }
+    }
 
     /** Speak text. Safe to call at any time — no-ops if TTS not ready. */
     protected void speak(String text, String id) {
