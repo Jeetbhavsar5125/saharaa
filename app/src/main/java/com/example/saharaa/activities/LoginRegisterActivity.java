@@ -1,15 +1,9 @@
 package com.example.saharaa.activities;
 
-import android.Manifest;
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
-import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 import android.util.Patterns;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -17,204 +11,78 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.example.saharaa.R;
+import com.example.saharaa.utils.AppPrefs;
+import com.example.saharaa.utils.HapticHelper;
 
-import java.util.ArrayList;
-import java.util.Locale;
-
-public class LoginRegisterActivity extends AppCompatActivity {
+public class LoginRegisterActivity extends BaseVoiceActivity {
 
     private EditText etInput, etOtp;
     private TextView tabLogin, tabRegister;
     private TextView[] otpBoxes;
     private Button btnContinue;
     private ImageView btnFingerprint;
-    private TextToSpeech tts;
-    private SpeechRecognizer speechRecognizer;
-    private Intent speechRecognizerIntent;
 
-    private static final int PERMISSION_REQUEST_CODE = 200;
-    private static final String TEST_MOBILE = "9313094070";
-    private static final String TEST_EMAIL = "test@saharaa.com";
-    private static final String TEST_OTP = "123456";
-
-    private boolean isBlindUser = false;
     private boolean isLoginMode = true;
-    private boolean isListening = false;
 
-    // Localization
+    // ─── BaseVoiceActivity contract ────────────────────────────────────────────
+
     @Override
-    protected void attachBaseContext(android.content.Context newBase) {
-        SharedPreferences prefs = newBase.getSharedPreferences("SaharaaPrefs", MODE_PRIVATE);
-        String lang = prefs.getString("LANGUAGE", "en");
-        Locale locale = new Locale(lang);
-        if (lang.equals("hi"))
-            locale = new Locale("hi", "IN");
-        if (lang.equals("gu"))
-            locale = new Locale("gu", "IN");
-
-        Locale.setDefault(locale);
-        android.content.res.Configuration config = new android.content.res.Configuration();
-        config.setLocale(locale);
-        super.attachBaseContext(newBase.createConfigurationContext(config));
+    protected String getWelcomeMessage() {
+        return getString(R.string.voice_welcome_skip);
     }
 
     @Override
+    protected void processCommand(String spoken) {
+        if (spoken.contains("finger") || spoken.contains("print") || spoken.contains("biometric")) {
+            handleBiometric();
+            return;
+        }
+
+        if (spoken.contains("skip") || spoken.contains("guest") || spoken.contains("pass")) {
+            speak("Skipping login", "NAV");
+            navigateHome();
+            return;
+        }
+
+        if (spoken.contains("back") || spoken.contains("exit")) {
+            speak("Going back", "NAV");
+            startActivity(new Intent(this, LanguageSelectionActivity.class));
+            finish();
+            return;
+        }
+
+        String clean = spoken.replaceAll("\\s+", "");
+
+        View otpContainer = findViewById(R.id.otpContainer);
+        if (otpContainer != null && otpContainer.getVisibility() == View.GONE) {
+            etInput.setText(clean);
+            handleContinue();
+        } else {
+            etOtp.setText(clean);
+            handleContinue();
+        }
+    }
+
+    // ─── Lifecycle ─────────────────────────────────────────────────────────────
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        super.onCreate(savedInstanceState); // BaseVoiceActivity handles TTS/STT + prefs
         setContentView(R.layout.activity_login_register);
 
         initUI();
         initListeners();
-        setupToggle();
-
-        SharedPreferences prefs = getSharedPreferences("SaharaaPrefs", MODE_PRIVATE);
-        isBlindUser = prefs.getBoolean("IS_BLIND", false);
-        String lang = prefs.getString("LANGUAGE", "en");
-
-        // Init TTS
-        tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                Locale locale = new Locale(lang);
-                if (lang.equals("hi"))
-                    locale = new Locale("hi", "IN");
-                if (lang.equals("gu"))
-                    locale = new Locale("gu", "IN");
-
-                tts.setLanguage(locale);
-                tts.setSpeechRate(0.85f);
-
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override
-                    public void onStart(String id) {
-                    }
-
-                    @Override
-                    public void onDone(String id) {
-                        if (!isBlindUser)
-                            return;
-                        runOnUiThread(() -> {
-                            if (id.startsWith("ASK_") || id.equals("RETRY")) {
-                                startListening();
-                            }
-                            if (id.equals("BIO_SUCCESS")) {
-                                navigateHome();
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onError(String id) {
-                    }
-                });
-
-                // Check permissions before welcoming
-                if (isBlindUser) {
-                    checkAndRequestPermissions();
-                }
-            }
-        });
-
-        if (isBlindUser) {
-            initSpeechRecognizer();
-        }
-    }
-
-    private void initSpeechRecognizer() {
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-        speechRecognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-
-        speechRecognizer.setRecognitionListener(new android.speech.RecognitionListener() {
-            @Override
-            public void onReadyForSpeech(Bundle params) {
-            }
-
-            @Override
-            public void onBeginningOfSpeech() {
-                isListening = true;
-            }
-
-            @Override
-            public void onRmsChanged(float rmsdB) {
-            }
-
-            @Override
-            public void onBufferReceived(byte[] buffer) {
-            }
-
-            @Override
-            public void onEndOfSpeech() {
-                isListening = false;
-            }
-
-            @Override
-            public void onError(int error) {
-                isListening = false;
-                // Auto Retry on No Match or Timeout
-                if (error == SpeechRecognizer.ERROR_NO_MATCH ||
-                        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    speak(getString(R.string.voice_retry), "RETRY");
-                } else {
-                    // Other errors (network, etc) - maybe just wait or silent retry
-                    // speak("Error occurred", "ERROR");
-                }
-            }
-
-            @Override
-            public void onResults(Bundle results) {
-                isListening = false;
-                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                if (matches != null && !matches.isEmpty()) {
-                    processVoiceResult(matches.get(0));
-                }
-            }
-
-            @Override
-            public void onPartialResults(Bundle partialResults) {
-            }
-
-            @Override
-            public void onEvent(int eventType, Bundle params) {
-            }
-        });
-    }
-
-    private void checkAndRequestPermissions() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[] { Manifest.permission.RECORD_AUDIO }, PERMISSION_REQUEST_CODE);
-        } else {
-            speak(getString(R.string.voice_welcome_skip), "ASK_INPUT");
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-            @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                speak(getString(R.string.voice_welcome_skip), "ASK_INPUT");
-            } else {
-                Toast.makeText(this, "Microphone permission required for voice commands", Toast.LENGTH_SHORT).show();
-            }
-        }
+        setLoginMode(true);
     }
 
     private void initUI() {
-        etInput = findViewById(R.id.etMobile);
-        etOtp = findViewById(R.id.etOtp);
+        etInput     = findViewById(R.id.etMobile);
+        etOtp       = findViewById(R.id.etOtp);
         btnContinue = findViewById(R.id.btnContinue);
-        tabLogin = findViewById(R.id.tabLogin);
+        tabLogin    = findViewById(R.id.tabLogin);
         tabRegister = findViewById(R.id.tabRegister);
         btnFingerprint = findViewById(R.id.btnFingerprint);
 
@@ -228,10 +96,14 @@ public class LoginRegisterActivity extends AppCompatActivity {
         otpBoxes[5] = findViewById(R.id.otpDigit6);
 
         // Back Button
-        findViewById(R.id.btnBack).setOnClickListener(v -> {
-            startActivity(new Intent(LoginRegisterActivity.this, LanguageSelectionActivity.class));
-            finish();
-        });
+        View btnBack = findViewById(R.id.btnBack);
+        if (btnBack != null) {
+            btnBack.setOnClickListener(v -> {
+                HapticHelper.tap(this);
+                startActivity(new Intent(this, LanguageSelectionActivity.class));
+                finish();
+            });
+        }
 
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -242,29 +114,31 @@ public class LoginRegisterActivity extends AppCompatActivity {
         });
 
         // Skip Button
-        findViewById(R.id.btnSkip).setOnClickListener(v -> navigateHome());
+        View btnSkip = findViewById(R.id.btnSkip);
+        if (btnSkip != null) {
+            btnSkip.setOnClickListener(v -> {
+                HapticHelper.tap(this);
+                navigateHome();
+            });
+        }
     }
 
     private void initListeners() {
-        tabLogin.setOnClickListener(v -> setLoginMode(true));
-        tabRegister.setOnClickListener(v -> setLoginMode(false));
+        tabLogin.setOnClickListener(v -> { HapticHelper.tap(this); setLoginMode(true); });
+        tabRegister.setOnClickListener(v -> { HapticHelper.tap(this); setLoginMode(false); });
 
-        btnContinue.setOnClickListener(v -> handleContinue());
-        btnFingerprint.setOnClickListener(v -> handleBiometric());
+        btnContinue.setOnClickListener(v -> { HapticHelper.tap(this); handleContinue(); });
+        btnFingerprint.setOnClickListener(v -> { HapticHelper.tap(this); handleBiometric(); });
 
         // OTP Text Watcher
         etOtp.addTextChangedListener(new android.text.TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 String text = s.toString();
                 for (int i = 0; i < 6; i++) {
                     if (i < text.length()) {
                         otpBoxes[i].setText(String.valueOf(text.charAt(i)));
-                        // Optional: Change styling to "Filled"
                         otpBoxes[i].setSelected(true);
                     } else {
                         otpBoxes[i].setText("");
@@ -272,23 +146,19 @@ public class LoginRegisterActivity extends AppCompatActivity {
                     }
                 }
             }
-
-            @Override
-            public void afterTextChanged(android.text.Editable s) {
-            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
         });
 
         // Focus Hidden Input on visual tap
-        findViewById(R.id.otpContainer).setOnClickListener(v -> {
-            etOtp.requestFocus();
-            android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(
-                    INPUT_METHOD_SERVICE);
-            imm.showSoftInput(etOtp, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-        });
-    }
-
-    private void setupToggle() {
-        setLoginMode(true);
+        View otpContainer = findViewById(R.id.otpContainer);
+        if (otpContainer != null) {
+            otpContainer.setOnClickListener(v -> {
+                etOtp.requestFocus();
+                android.view.inputmethod.InputMethodManager imm =
+                        (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(etOtp, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            });
+        }
     }
 
     private void setLoginMode(boolean login) {
@@ -315,27 +185,24 @@ public class LoginRegisterActivity extends AppCompatActivity {
 
         if (input.isEmpty()) {
             if (isBlindUser)
-                speak("Please say your mobile or email", "RETRY");
+                speak("Please say your mobile or email", "LOOP_RETRY");
             else
                 Toast.makeText(this, getString(R.string.error_invalid_input), Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (findViewById(R.id.otpContainer).getVisibility() == android.view.View.GONE) {
+        View otpContainer = findViewById(R.id.otpContainer);
+        if (otpContainer != null && otpContainer.getVisibility() == View.GONE) {
             if (isValidInput(input)) {
-                // Show Visual OTP Container
-                findViewById(R.id.otpContainer).setVisibility(android.view.View.VISIBLE);
-
-                // Focus styling for first box
+                otpContainer.setVisibility(View.VISIBLE);
                 otpBoxes[0].setSelected(true);
-
-                etOtp.requestFocus(); // Focus hidden input for typing
+                etOtp.requestFocus();
 
                 if (isBlindUser)
-                    speak(getString(R.string.voice_otp), "ASK_OTP");
+                    speak(getString(R.string.voice_otp), "LOOP_RETRY");
             } else {
                 if (isBlindUser)
-                    speak(getString(R.string.error_invalid_input), "RETRY");
+                    speak(getString(R.string.error_invalid_input), "LOOP_RETRY");
                 else
                     Toast.makeText(this, getString(R.string.error_invalid_input), Toast.LENGTH_SHORT).show();
             }
@@ -343,28 +210,30 @@ public class LoginRegisterActivity extends AppCompatActivity {
         }
 
         String otp = etOtp.getText().toString().trim();
-        if ((input.equals(TEST_MOBILE) || input.equals(TEST_EMAIL)) && otp.equals(TEST_OTP)) {
+        // Accepts any valid 6-digit OTP for demo authentication
+        if (otp.length() == 6) {
+            HapticHelper.success(this);
             if (isBlindUser)
                 speak(getString(R.string.voice_success), "SUCCESS");
             navigateHome();
         } else {
+            HapticHelper.failure(this);
             if (isBlindUser)
-                speak(getString(R.string.voice_retry), "RETRY");
-            Toast.makeText(this, "Invalid Code", Toast.LENGTH_SHORT).show();
-            etOtp.setText(""); // Clear on fail
+                speak(getString(R.string.voice_retry), "LOOP_RETRY");
+            Toast.makeText(this, "Please enter 6-digit code", Toast.LENGTH_SHORT).show();
+            etOtp.setText("");
         }
     }
 
     private boolean isValidInput(String input) {
         boolean isMobile = input.matches("\\d{10}");
-        boolean isEmail = Patterns.EMAIL_ADDRESS.matcher(input).matches();
+        boolean isEmail  = Patterns.EMAIL_ADDRESS.matcher(input).matches();
         return isMobile || isEmail;
     }
 
-    // Real Biometric Logic
     private void handleBiometric() {
-        // Check Hardware
-        androidx.biometric.BiometricManager biometricManager = androidx.biometric.BiometricManager.from(this);
+        androidx.biometric.BiometricManager biometricManager =
+                androidx.biometric.BiometricManager.from(this);
         int canAuthenticate = biometricManager
                 .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG);
 
@@ -377,7 +246,7 @@ public class LoginRegisterActivity extends AppCompatActivity {
 
             Toast.makeText(this, error, Toast.LENGTH_SHORT).show();
             if (isBlindUser)
-                speak(error, "BIO_ERROR");
+                speak(error, "LOOP_RETRY");
             return;
         }
 
@@ -387,9 +256,8 @@ public class LoginRegisterActivity extends AppCompatActivity {
                     @Override
                     public void onAuthenticationError(int errorCode, CharSequence errString) {
                         super.onAuthenticationError(errorCode, errString);
-                        // System UI handles visual error.
                         if (isBlindUser && errorCode != androidx.biometric.BiometricPrompt.ERROR_USER_CANCELED) {
-                            speak("Authentication canceled or error", "BIO_ERROR");
+                            speak("Authentication canceled or error", "LOOP_RETRY");
                         }
                     }
 
@@ -397,23 +265,25 @@ public class LoginRegisterActivity extends AppCompatActivity {
                     public void onAuthenticationSucceeded(
                             androidx.biometric.BiometricPrompt.AuthenticationResult result) {
                         super.onAuthenticationSucceeded(result);
+                        HapticHelper.success(LoginRegisterActivity.this);
                         if (isBlindUser)
-                            speak(getString(R.string.msg_biometric_success), "BIO_SUCCESS");
+                            speak(getString(R.string.msg_biometric_success), "SUCCESS");
                         else {
-                            Toast.makeText(LoginRegisterActivity.this, getString(R.string.msg_biometric_success),
-                                    Toast.LENGTH_SHORT).show();
-                            navigateHome();
+                            Toast.makeText(LoginRegisterActivity.this,
+                                    getString(R.string.msg_biometric_success), Toast.LENGTH_SHORT).show();
                         }
+                        navigateHome();
                     }
 
                     @Override
                     public void onAuthenticationFailed() {
                         super.onAuthenticationFailed();
-                        // System UI shakes/shows error.
+                        HapticHelper.failure(LoginRegisterActivity.this);
                     }
                 });
 
-        androidx.biometric.BiometricPrompt.PromptInfo promptInfo = new androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+        androidx.biometric.BiometricPrompt.PromptInfo promptInfo =
+                new androidx.biometric.BiometricPrompt.PromptInfo.Builder()
                 .setTitle(getString(R.string.action_fingerprint))
                 .setSubtitle("Saharaa Login")
                 .setNegativeButtonText("Cancel")
@@ -423,59 +293,10 @@ public class LoginRegisterActivity extends AppCompatActivity {
     }
 
     private void navigateHome() {
-        // SAVE SETUP COMPLETE
-        SharedPreferences prefs = getSharedPreferences("SaharaaPrefs", MODE_PRIVATE);
-        prefs.edit().putBoolean("SETUP_COMPLETE", true).apply();
+        getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
+                .edit().putBoolean(AppPrefs.KEY_SETUP_DONE, true).apply();
 
-        startActivity(new Intent(LoginRegisterActivity.this, MainActivity.class));
+        startActivity(new Intent(this, MainActivity.class));
         finish();
-    }
-
-    private void startListening() {
-        if (speechRecognizer != null && !isListening) {
-            runOnUiThread(() -> speechRecognizer.startListening(speechRecognizerIntent));
-        }
-    }
-
-    // Process results from SpeechRecognizer
-    private void processVoiceResult(String spoken) {
-        spoken = spoken.toLowerCase();
-
-        if (spoken.contains("finger") || spoken.contains("print") || spoken.contains("biometric")) {
-            handleBiometric();
-            return;
-        }
-
-        if (spoken.contains("skip") || spoken.contains("guest") || spoken.contains("pass")) {
-            speak("Skipping login", "NAV_HOME");
-            navigateHome();
-            return;
-        }
-
-        String clean = spoken.replaceAll("\\s+", "");
-
-        if (etOtp.getVisibility() == android.view.View.GONE) {
-            etInput.setText(clean);
-            handleContinue();
-        } else {
-            etOtp.setText(clean);
-            handleContinue();
-        }
-    }
-
-    private void speak(String msg, String id) {
-        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, id);
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
-        if (speechRecognizer != null) {
-            speechRecognizer.destroy();
-        }
     }
 }
