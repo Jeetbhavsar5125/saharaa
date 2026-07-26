@@ -41,6 +41,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isListening      = false;
     private boolean isActivityActive = false;
     private boolean ttsReady         = false;
+    private boolean wasEverPaused    = false; // tracks returns from child activities
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -287,15 +288,23 @@ public class MainActivity extends AppCompatActivity {
         isActivityActive = true;
         // Re-init SR (may have been destroyed on pause)
         if (speechRecognizer == null) initSpeechRecognizer();
-        // Only start loop if TTS is ready and not already listening
-        if (isBlindUser && ttsReady && !isListening) {
-            mainHandler.postDelayed(() -> startListeningNow(), 300L);
+
+        if (isBlindUser && ttsReady) {
+            if (wasEverPaused) {
+                // Returning from scanner/history/settings — re-announce menu then listen
+                speak("Saharaa. Say: scan product, barcode, history, or settings.", "WELCOME");
+            } else if (!isListening) {
+                // First-time resume after TTS init (WELCOME already spoken in initApp)
+                mainHandler.postDelayed(() -> startListeningNow(), 300L);
+            }
         }
+        wasEverPaused = false;
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        wasEverPaused = true;
         isActivityActive = false;
         if (tts != null) tts.stop();
         if (speechRecognizer != null) {

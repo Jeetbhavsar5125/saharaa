@@ -173,7 +173,10 @@ public class SmartScannerActivity extends AppCompatActivity {
                 btnSaveToHistory.setEnabled(false);
                 btnSaveToHistory.setText("✓  Saved");
                 Toast.makeText(this, "Saved to history!", Toast.LENGTH_SHORT).show();
-                if (isBlindMode) speak("Saved to history.", "SAVED");
+                // Voice: confirm save then keep the loop alive
+                if (isBlindMode) speak("Saved to history. Say scan again or back.", "SAVED");
+            } else {
+                Toast.makeText(this, "Already saved.", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -199,8 +202,9 @@ public class SmartScannerActivity extends AppCompatActivity {
                 @Override public void onStart(String id) {}
                 @Override public void onDone(String id) {
                     if (isBlindMode && isActivityActive) {
-                        if ("READY".equals(id) || "RESULT".equals(id)
-                                || "LOOP_RETRY".equals(id) || "MANUAL".equals(id)) {
+                        if ("READY".equals(id) || "RESULT_PROMPT".equals(id)
+                                || "LOOP_RETRY".equals(id) || "MANUAL".equals(id)
+                                || "SAVED".equals(id)) {
                             mainHandler.post(() -> startListeningNow());
                         }
                     }
@@ -405,7 +409,7 @@ public class SmartScannerActivity extends AppCompatActivity {
                             && (System.currentTimeMillis() - scanStartTime > 6000)) {
                         isScanning = false;
                         runOnUiThread(() -> {
-                            speak("No barcode found. Please try again.", "RESULT");
+                            speak("No barcode found. Press volume up or say scan to try again.", "RESULT_PROMPT");
                             showIdlePanel();
                         });
                     }
@@ -433,12 +437,13 @@ public class SmartScannerActivity extends AppCompatActivity {
                         String calories    = p.nutriments   != null && p.nutriments.energyKcal != null
                                 ? p.nutriments.energyKcal + " kcal / 100g" : "";
 
-                        // Voice summary
+                        // Voice: product summary + action prompt
                         StringBuilder voiceMsg = new StringBuilder();
-                        voiceMsg.append("Product: ").append(name).append(". ");
+                        voiceMsg.append("Product found. ").append(name).append(". ");
                         if (!brand.isEmpty())    voiceMsg.append("Brand: ").append(brand).append(". ");
                         if (!calories.isEmpty()) voiceMsg.append("Calories: ").append(calories).append(". ");
-                        speak(voiceMsg.toString(), "RESULT");
+                        voiceMsg.append("Say: scan again, save to history, or back.");
+                        speak(voiceMsg.toString(), "RESULT_PROMPT");
 
                         // Key-value rows
                         String[][] rows = {
@@ -454,7 +459,7 @@ public class SmartScannerActivity extends AppCompatActivity {
                         showProductResult(name, "📦 Barcode Scan", rows, record);
 
                     } else {
-                        speak("Product not found in database.", "RESULT");
+                        speak("Product not found. Say scan again or back.", "RESULT_PROMPT");
                         showIdlePanel();
                     }
                 });
@@ -463,7 +468,7 @@ public class SmartScannerActivity extends AppCompatActivity {
             @Override
             public void onFailure(@NonNull Call<ProductResponse> call, @NonNull Throwable t) {
                 runOnUiThread(() -> {
-                    speak("Network error. Please check your connection.", "RESULT");
+                    speak("Network error. Say scan again or back.", "RESULT_PROMPT");
                     showIdlePanel();
                 });
             }
@@ -486,9 +491,10 @@ public class SmartScannerActivity extends AppCompatActivity {
         if (price != null || expiry != null) {
             isScanning = false;
             StringBuilder voiceMsg = new StringBuilder();
-            if (price  != null) voiceMsg.append("Price ").append(price).append(" rupees. ");
-            if (expiry != null) voiceMsg.append("Expiry ").append(expiry).append(". ");
-            speak(voiceMsg.toString(), "RESULT");
+            if (price  != null) voiceMsg.append("Price: ").append(price).append(" rupees. ");
+            if (expiry != null) voiceMsg.append("Expiry: ").append(expiry).append(". ");
+            voiceMsg.append("Say: scan again, save to history, or back.");
+            speak(voiceMsg.toString(), "RESULT_PROMPT");
 
             String[][] rows = {
                     {"Price",        price  != null ? "₹" + price : null},
@@ -509,7 +515,8 @@ public class SmartScannerActivity extends AppCompatActivity {
             if (largestBlock != null && largestBlock.length() > 5) {
                 if (System.currentTimeMillis() - scanStartTime > 4000) {
                     isScanning = false;
-                    speak("Found text: " + largestBlock, "RESULT");
+                    String msg = "Found text: " + largestBlock + ". Say: scan again, save, or back.";
+                    speak(msg, "RESULT_PROMPT");
                     String[][] rows = {{"Text Found", largestBlock}};
                     ScanRecord record = new ScanRecord(
                             ScanRecord.TYPE_TEXT, largestBlock, null, null, null, largestBlock);
@@ -519,7 +526,7 @@ public class SmartScannerActivity extends AppCompatActivity {
             } else if (isScanning && (System.currentTimeMillis() - scanStartTime > 6000)) {
                 isScanning = false;
                 runOnUiThread(() -> {
-                    speak("No specific text found. Please try again.", "RESULT");
+                    speak("No text found. Say scan again or back.", "RESULT_PROMPT");
                     showIdlePanel();
                 });
             }
@@ -585,22 +592,27 @@ public class SmartScannerActivity extends AppCompatActivity {
 
     private void processCommand(String command) {
         if (command.contains("scan") || command.contains("capture") || command.contains("read")) {
+            speak("Scanning now.", "SCANNING");
             startScanningProcess();
         } else if (command.contains("save") || command.contains("history")) {
             if (pendingRecord != null) {
                 HistoryManager.addRecord(this, pendingRecord);
-                speak("Saved to history.", "SAVED");
                 pendingRecord = null;
+                runOnUiThread(() -> {
+                    btnSaveToHistory.setEnabled(false);
+                    btnSaveToHistory.setText("✓  Saved");
+                });
+                speak("Saved to history. Say scan again or back.", "SAVED");
             } else {
-                speak("Nothing to save yet.", "LOOP_RETRY");
+                speak("Nothing to save. Say scan again or back.", "LOOP_RETRY");
             }
         } else if (command.contains("again") || command.contains("retry") || command.contains("reset")) {
             resetToIdle();
         } else if (command.contains("back") || command.contains("exit") || command.contains("close")) {
-            speak("Closing scanner.", "EXIT");
+            speak("Going back.", "EXIT");
             finish();
         } else {
-            speak("Say scan to capture, save for history, again to retry, or back to exit.", "LOOP_RETRY");
+            speak("Say: scan to capture, save for history, again to rescan, or back.", "LOOP_RETRY");
         }
     }
 
