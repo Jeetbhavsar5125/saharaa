@@ -1,12 +1,7 @@
 package com.example.saharaa.activities;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.speech.RecognizerIntent;
-import android.speech.SpeechRecognizer;
-import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,7 +10,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -30,7 +24,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-public class HistoryActivity extends AppCompatActivity {
+public class HistoryActivity extends BaseVoiceActivity {
 
     private RecyclerView recyclerHistory;
     private LinearLayout emptyState;
@@ -38,22 +32,38 @@ public class HistoryActivity extends AppCompatActivity {
     private HistoryAdapter adapter;
     private List<ScanRecord> records;
 
-    private TextToSpeech tts;
-    private SpeechRecognizer speechRecognizer;
-    private Intent speechIntent;
-    private boolean isBlindUser = false;
-    private boolean isListening = false;
-    private boolean isActivityActive = false;
+    // ─── BaseVoiceActivity contract ────────────────────────────────────────────
+
+    @Override
+    protected String getWelcomeMessage() {
+        int count = records != null ? records.size() : 0;
+        if (count == 0) {
+            return "Scan History. No scans yet. Say back to go back.";
+        } else {
+            return "Scan History. You have " + count + " scans. "
+                    + "Say back to go back, or clear to clear history.";
+        }
+    }
+
+    @Override
+    protected void processCommand(String command) {
+        if (command.contains("back") || command.contains("exit") || command.contains("close")) {
+            speak("Going back.", "NAV");
+            finish();
+        } else if (command.contains("clear") || command.contains("delete") || command.contains("wipe")) {
+            clearHistory();
+            speak("History cleared.", "LOOP_RETRY");
+        } else {
+            speak("Say back to go back, or clear to clear history.", "LOOP_RETRY");
+        }
+    }
+
+    // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        super.onCreate(savedInstanceState); // BaseVoiceActivity loads isBlindUser, lang, TTS/STT
         setContentView(R.layout.activity_history);
-        isActivityActive = true;
-
-        SharedPreferences prefs = getSharedPreferences("SaharaaPrefs", MODE_PRIVATE);
-        isBlindUser = prefs.getBoolean("IS_BLIND", false);
-        String lang  = prefs.getString("LANGUAGE", "en");
 
         // UI refs
         recyclerHistory = findViewById(R.id.recyclerHistory);
@@ -62,14 +72,17 @@ public class HistoryActivity extends AppCompatActivity {
         tvBarcodeCount  = findViewById(R.id.tvBarcodeCount);
 
         findViewById(R.id.btnBack).setOnClickListener(v -> finish());
-        findViewById(R.id.btnClearAll).setOnClickListener(v -> clearHistory());
+        findViewById(R.id.btnClearAll).setOnClickListener(v -> {
+            clearHistory();
+            speak("History cleared.", "LOOP_RETRY");
+        });
 
         FloatingActionButton fabMic = findViewById(R.id.fabMic);
         if (isBlindUser) {
             fabMic.setVisibility(View.VISIBLE);
             fabMic.setOnClickListener(v -> {
                 speak("Listening", "MANUAL");
-                startListening();
+                startListeningNow();
             });
         } else {
             fabMic.setVisibility(View.GONE);
@@ -81,36 +94,9 @@ public class HistoryActivity extends AppCompatActivity {
         adapter = new HistoryAdapter(records);
         recyclerHistory.setAdapter(adapter);
         updateUI();
-
-        // TTS
-        tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                Locale locale = resolveLocale(lang);
-                tts.setLanguage(locale);
-
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String id) {}
-                    @Override public void onDone(String id) {
-                        if (isBlindUser && isActivityActive
-                                && ("WELCOME".equals(id) || "LOOP_RETRY".equals(id) || "MANUAL".equals(id))) {
-                            runOnUiThread(() -> startListening());
-                        }
-                    }
-                    @Override public void onError(String id) {}
-                });
-
-                if (isBlindUser) {
-                    int count = records.size();
-                    String msg = count == 0
-                            ? "Scan History. No scans yet. Say back to go back."
-                            : "Scan History. You have " + count + " scans. Say back to go back, or clear to clear history.";
-                    speak(msg, "WELCOME");
-                }
-            }
-        });
-
-        if (isBlindUser) initSpeechRecognizer();
     }
+
+    // ─── UI helpers ────────────────────────────────────────────────────────────
 
     private void updateUI() {
         long barcodeCount = records.stream()
@@ -132,103 +118,6 @@ public class HistoryActivity extends AppCompatActivity {
         records.clear();
         adapter.notifyDataSetChanged();
         updateUI();
-        if (isBlindUser) speak("History cleared.", "DONE");
-    }
-
-    // ─── TTS Helper ────────────────────────────────────────────────────────────
-
-    private void speak(String msg, String id) {
-        if (tts != null) tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, id);
-    }
-
-    // ─── STT ───────────────────────────────────────────────────────────────────
-
-    private void initSpeechRecognizer() {
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
-        speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-
-        speechRecognizer.setRecognitionListener(new android.speech.RecognitionListener() {
-            @Override public void onReadyForSpeech(Bundle params) { isListening = true; }
-            @Override public void onBeginningOfSpeech() {}
-            @Override public void onRmsChanged(float rms) {}
-            @Override public void onBufferReceived(byte[] buf) {}
-            @Override public void onEndOfSpeech() { isListening = false; }
-
-            @Override
-            public void onError(int error) {
-                isListening = false;
-                if (isActivityActive && isBlindUser)
-                    new android.os.Handler(android.os.Looper.getMainLooper())
-                            .postDelayed(() -> startListening(), 1000);
-            }
-
-            @Override
-            public void onResults(Bundle results) {
-                isListening = false;
-                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                if (matches != null && !matches.isEmpty()) {
-                    processCommand(matches.get(0).toLowerCase());
-                } else if (isActivityActive && isBlindUser) {
-                    startListening();
-                }
-            }
-
-            @Override public void onPartialResults(Bundle b) {}
-            @Override public void onEvent(int e, Bundle b) {}
-        });
-    }
-
-    private void startListening() {
-        if (speechRecognizer != null && !isListening)
-            runOnUiThread(() -> speechRecognizer.startListening(speechIntent));
-    }
-
-    private void processCommand(String command) {
-        if (command.contains("back") || command.contains("exit") || command.contains("close")) {
-            speak("Going back.", "NAV");
-            finish();
-        } else if (command.contains("clear") || command.contains("delete") || command.contains("wipe")) {
-            speak("History cleared.", "DONE");
-            clearHistory();
-        } else {
-            speak("Say back to go back, or clear to clear history.", "LOOP_RETRY");
-        }
-    }
-
-    // ─── Locale helper ─────────────────────────────────────────────────────────
-
-    private Locale resolveLocale(String lang) {
-        switch (lang) {
-            case "hi": return new Locale("hi", "IN");
-            case "gu": return new Locale("gu", "IN");
-            default:   return Locale.US;
-        }
-    }
-
-    // ─── Lifecycle ─────────────────────────────────────────────────────────────
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        isActivityActive = true;
-        if (isBlindUser && tts != null && !isListening) startListening();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        isActivityActive = false;
-        if (tts != null) tts.stop();
-        if (speechRecognizer != null) { speechRecognizer.stopListening(); speechRecognizer.cancel(); isListening = false; }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (tts != null) tts.shutdown();
-        if (speechRecognizer != null) speechRecognizer.destroy();
     }
 
     // ─── Inner Adapter ─────────────────────────────────────────────────────────

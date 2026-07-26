@@ -3,7 +3,11 @@ package com.example.saharaa.activities;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.view.View;
@@ -21,12 +25,18 @@ import java.util.Locale;
 
 public class LanguageSelectionActivity extends AppCompatActivity {
 
-    private static final int SPEECH_REQUEST = 202;
-    private TextToSpeech tts;
+    private TextToSpeech     tts;
+    private SpeechRecognizer speechRecognizer;
+    private Intent           speechIntent;
 
-    private boolean waitingForInput = false;
-    private boolean isBlindUser = false;
-    private String selectedLanguage = "en"; // Default
+    private boolean ttsReady         = false;
+    private boolean isListening      = false;
+    private boolean isActivityActive = false;
+    private boolean waitingForInput  = false;
+    private boolean isBlindUser      = false;
+    private String  selectedLanguage = "en";
+
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // UI Elements
     private TextView tvTitle, tvSubtitle, tvHeaderSelected, tvHeaderAll;
@@ -64,44 +74,33 @@ public class LanguageSelectionActivity extends AppCompatActivity {
 
         // Init TTS
         tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.US);
-                tts.setSpeechRate(0.85f);
+            if (status != TextToSpeech.SUCCESS) return;
+            tts.setLanguage(Locale.US);
+            tts.setSpeechRate(0.85f);
+            ttsReady = true;
 
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override
-                    public void onStart(String id) {
-                    }
-
-                    @Override
-                    public void onDone(String id) {
-                        if (!isBlindUser)
-                            return; // Ignore if not blind
-
-                        runOnUiThread(() -> {
-                            switch (id) {
-                                case "ASK_LANG":
-                                case "RETRY_LANG":
-                                    if (waitingForInput)
-                                        startListening();
-                                    break;
-                                case "CONFIRM_LANG":
-                                    // 🔹 Auto-proceed after confirmation
-                                    goToLogin();
-                                    break;
-                            }
-                        });
-                    }
-
-                    @Override
-                    public void onError(String id) {
-                    }
-                });
-
-                // 🔹 Only start voice loop if Blind Mode is active
-                if (isBlindUser) {
-                    askLanguage();
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override public void onStart(String id) {}
+                @Override public void onDone(String id) {
+                    if (!isBlindUser) return;
+                    mainHandler.post(() -> {
+                        switch (id) {
+                            case "ASK_LANG":
+                            case "RETRY_LANG":
+                                if (waitingForInput) startListeningNow();
+                                break;
+                            case "CONFIRM_LANG":
+                                goToLogin();
+                                break;
+                        }
+                    });
                 }
+                @Override public void onError(String id) {}
+            });
+
+            if (isBlindUser) {
+                initSpeechRecognizer();
+                askLanguage();
             }
         });
     }
@@ -322,68 +321,77 @@ public class LanguageSelectionActivity extends AppCompatActivity {
         btnContinue.setText(cont);
     }
 
+    // ─── STT ───────────────────────────────────────────────────────────────────
+
+    private void initSpeechRecognizer() {
+        if (speechRecognizer != null) { speechRecognizer.destroy(); speechRecognizer = null; }
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        speechIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L);
+        speechIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L);
+
+        speechRecognizer.setRecognitionListener(new RecognitionListener() {
+            @Override public void onReadyForSpeech(Bundle p) { isListening = true; }
+            @Override public void onBeginningOfSpeech() {}
+            @Override public void onRmsChanged(float r) {}
+            @Override public void onBufferReceived(byte[] b) {}
+            @Override public void onEndOfSpeech() { isListening = false; }
+            @Override public void onPartialResults(Bundle b) {}
+            @Override public void onEvent(int e, Bundle b) {}
+
+            @Override
+            public void onError(int error) {
+                isListening = false;
+                if (!isActivityActive || !waitingForInput) return;
+                long delay = (error == SpeechRecognizer.ERROR_NO_MATCH
+                        || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 0L : 300L;
+                mainHandler.postDelayed(() -> startListeningNow(), delay);
+            }
+
+            @Override
+            public void onResults(Bundle results) {
+                isListening = false;
+                ArrayList<String> matches =
+                        results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    processVoiceResult(matches.get(0).toLowerCase());
+                } else if (isActivityActive && waitingForInput) {
+                    startListeningNow();
+                }
+            }
+        });
+    }
+
+    private void startListeningNow() {
+        if (!isActivityActive || speechRecognizer == null) return;
+        if (isListening) { speechRecognizer.cancel(); isListening = false; }
+        runOnUiThread(() -> speechRecognizer.startListening(speechIntent));
+    }
+
+    private void processVoiceResult(String spoken) {
+        if (spoken.contains("english"))                            updateSelection("en", true);
+        else if (spoken.contains("spanish") || spoken.contains("español")) updateSelection("es", true);
+        else if (spoken.contains("french")  || spoken.contains("français")) updateSelection("fr", true);
+        else if (spoken.contains("german")  || spoken.contains("deutsch"))  updateSelection("de", true);
+        else if (spoken.contains("hindi"))                         updateSelection("hi", true);
+        else if (spoken.contains("gujarati") || spoken.contains("gujrati")) updateSelection("gu", true);
+        else if (spoken.contains("korean"))                        updateSelection("ko", true);
+        else retry();
+    }
+
     // Ask user for language
     private void askLanguage() {
         waitingForInput = true;
         speak("Please select your language. Say English, Hindi, or Gujarati.", "ASK_LANG");
     }
 
-    // Start STT
-    private void startListening() {
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Say Language Name");
-        try {
-            startActivityForResult(intent, SPEECH_REQUEST);
-        } catch (Exception e) {
-            retry();
-        }
-    }
-
-    // Handle STT result
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        if (requestCode == SPEECH_REQUEST) {
-            if (resultCode == RESULT_OK && data != null) {
-                ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-                if (results == null || results.isEmpty()) {
-                    retry();
-                    return;
-                }
-
-                String spoken = results.get(0).toLowerCase();
-
-                if (spoken.contains("english")) {
-                    updateSelection("en", true);
-                } else if (spoken.contains("spanish") || spoken.contains("español")) {
-                    updateSelection("es", true);
-                } else if (spoken.contains("french") || spoken.contains("français")) {
-                    updateSelection("fr", true);
-                } else if (spoken.contains("german") || spoken.contains("deutsch")) {
-                    updateSelection("de", true);
-                } else if (spoken.contains("hindi")) {
-                    updateSelection("hi", true);
-                } else if (spoken.contains("gujarati") || spoken.contains("gujrati")) {
-                    updateSelection("gu", true);
-                } else if (spoken.contains("korean")) {
-                    updateSelection("ko", true);
-                } else {
-                    retry();
-                }
-            } else {
-                // 🔹 Auto-retry on failure/cancellation
-                retry();
-            }
-        }
-    }
-
     // Retry automatically
     private void retry() {
-        if (!isBlindUser)
-            return;
+        if (!isBlindUser) return;
         speak("Sorry, I didn't catch that. Say English, Hindi, or Gujarati.", "RETRY_LANG");
     }
 
@@ -398,15 +406,36 @@ public class LanguageSelectionActivity extends AppCompatActivity {
     }
 
     private void speak(String text, String id) {
+        if (tts == null || !ttsReady) return;
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        isActivityActive = true;
+        if (isBlindUser && speechRecognizer == null) initSpeechRecognizer();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isActivityActive = false;
+        waitingForInput = false;
+        if (tts != null) tts.stop();
+        if (speechRecognizer != null) {
+            speechRecognizer.stopListening();
+            speechRecognizer.cancel();
+            isListening = false;
+        }
+        mainHandler.removeCallbacksAndMessages(null);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
+        mainHandler.removeCallbacksAndMessages(null);
+        if (tts != null) { tts.stop(); tts.shutdown(); tts = null; }
+        if (speechRecognizer != null) { speechRecognizer.destroy(); speechRecognizer = null; }
     }
 }

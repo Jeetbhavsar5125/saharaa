@@ -454,8 +454,12 @@ public class SmartScannerActivity extends AppCompatActivity {
                                         ? ingredients.substring(0, 120) + "…" : ingredients},
                         };
 
+                        // Cap ingredients length before saving to prevent large SharedPref blobs
+                        String ingredientsSaved = ingredients.length() > 500
+                                ? ingredients.substring(0, 500) + "…" : ingredients;
+
                         ScanRecord record = new ScanRecord(
-                                ScanRecord.TYPE_BARCODE, name, brand, calories, ingredients, null);
+                                ScanRecord.TYPE_BARCODE, name, brand, calories, ingredientsSaved, null);
                         showProductResult(name, "📦 Barcode Scan", rows, record);
 
                     } else {
@@ -655,6 +659,10 @@ public class SmartScannerActivity extends AppCompatActivity {
         switch (lang) {
             case "hi": return new Locale("hi", "IN");
             case "gu": return new Locale("gu", "IN");
+            case "es": return new Locale("es", "ES");
+            case "fr": return Locale.FRENCH;
+            case "de": return Locale.GERMAN;
+            case "ko": return Locale.KOREA;
             default:   return Locale.US;
         }
     }

@@ -36,14 +36,15 @@ public class InfoParser {
             if (EXPIRY_KEYWORD.matcher(line).find()) {
                 Matcher dateMatcher = DATE_PATTERN.matcher(line);
                 if (dateMatcher.find()) {
-                    return dateMatcher.group(1);
+                    // group(1) = dd/mm/yyyy style, group(2) = mm/yyyy style
+                    return dateMatcher.group(1) != null ? dateMatcher.group(1) : dateMatcher.group(2);
                 }
             }
         }
         // Fallback: Just look for any date (less accurate)
         Matcher matcher = DATE_PATTERN.matcher(text);
         if (matcher.find()) {
-            return matcher.group(1);
+            return matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
         }
         return null;
     }

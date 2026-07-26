@@ -203,12 +203,21 @@
             <View android:layout_width="match_parent" android:layout_height="1dp"
                 android:background="#D7CCC8" android:layout_marginBottom="14dp"/>
 
-            <!-- Key-Value Info Rows Container -->
-            <LinearLayout
-                android:id="@+id/infoContainer"
+            <!-- Scrollable Key-Value Info Rows (prevents overflow on long ingredient lists) -->
+            <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"/>
+                android:nestedScrollingEnabled="true"
+                android:scrollbars="vertical"
+                android:maxHeight="180dp">
+
+                <!-- Key-Value Info Rows Container -->
+                <LinearLayout
+                    android:id="@+id/infoContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"/>
+            </ScrollView>
 
             <!-- Divider -->
             <View android:layout_width="match_parent" android:layout_height="1dp"
