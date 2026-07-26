@@ -88,6 +88,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     // ─── State ─────────────────────────────────────────────────────────────────
     private ScanRecord pendingRecord = null;
     private View tvVoiceStatus;
+    private ShakeDetector shakeDetector;
 
     // ─── BaseVoiceActivity contract ────────────────────────────────────────────
 
