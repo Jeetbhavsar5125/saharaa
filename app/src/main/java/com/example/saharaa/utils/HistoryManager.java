@@ -1,56 +1,70 @@
 package com.example.saharaa.utils;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 
+import com.example.saharaa.db.AppDatabase;
+import com.example.saharaa.db.ScanRecordDao;
 import com.example.saharaa.model.ScanRecord;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
-import java.lang.reflect.Type;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Manages scan history using SharedPreferences + Gson serialization.
- * Stores up to MAX_RECORDS recent scans (oldest removed when limit reached).
+ * Manages scan history persistence using Room database.
+ *
+ * All write operations are executed on a background thread automatically.
+ * Read operations must NOT be called on the main thread — use a background executor or
+ * Android's LiveData/ViewModel pattern for UI-bound reads.
+ *
+ * Migration note: previously used Gson + SharedPreferences.
+ * Room replaced it in v1.1 to fix potential data corruption on large records.
  */
-public class HistoryManager {
+public final class HistoryManager {
 
-    private static final String PREFS_NAME   = "SaharaaHistory";
-    private static final String KEY_RECORDS  = "scan_records";
-    private static final int    MAX_RECORDS  = 50;
+    private static final int MAX_HISTORY = 100;
+    private static final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private static final Gson gson = new Gson();
+    private HistoryManager() {}
 
-    /** Save a new ScanRecord to history. Trims oldest if over limit. */
-    public static void addRecord(Context ctx, ScanRecord record) {
-        List<ScanRecord> list = getAll(ctx);
-        list.add(0, record);                // newest first
-        if (list.size() > MAX_RECORDS) {
-            list = list.subList(0, MAX_RECORDS);
-        }
-        save(ctx, list);
+    /**
+     * Inserts a new ScanRecord into the Room database (background thread).
+     * If total records exceed MAX_HISTORY, oldest are implicitly dropped on next query
+     * via the ORDER BY + LIMIT pattern in the DAO.
+     */
+    public static void addRecord(Context context, ScanRecord record) {
+        executor.execute(() -> {
+            ScanRecordDao dao = AppDatabase.getInstance(context).scanRecordDao();
+            dao.insert(record);
+        });
     }
 
-    /** Return all history records, newest first. */
-    public static List<ScanRecord> getAll(Context ctx) {
-        SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String json = prefs.getString(KEY_RECORDS, null);
-        if (json == null) return new ArrayList<>();
-        Type type = new TypeToken<List<ScanRecord>>() {}.getType();
-        List<ScanRecord> list = gson.fromJson(json, type);
-        return list != null ? list : new ArrayList<>();
+    /**
+     * Returns all records (most recent first).
+     * MUST be called from a background thread (e.g., inside an AsyncTask, coroutine, or Executor).
+     */
+    public static List<ScanRecord> getAll(Context context) {
+        ScanRecordDao dao = AppDatabase.getInstance(context).scanRecordDao();
+        return dao.getRecent(MAX_HISTORY);
     }
 
-    /** Wipe all history. */
-    public static void clearAll(Context ctx) {
-        ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-           .edit().remove(KEY_RECORDS).apply();
+    /**
+     * Clears all history records (background thread).
+     */
+    public static void clearAll(Context context) {
+        executor.execute(() -> {
+            ScanRecordDao dao = AppDatabase.getInstance(context).scanRecordDao();
+            dao.clearAll();
+        });
     }
 
-    private static void save(Context ctx, List<ScanRecord> list) {
-        ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-           .edit().putString(KEY_RECORDS, gson.toJson(list)).apply();
+    /**
+     * Returns total number of records.
+     * MUST be called from a background thread.
+     */
+    public static int count(Context context) {
+        ScanRecordDao dao = AppDatabase.getInstance(context).scanRecordDao();
+        return dao.count();
     }
 }

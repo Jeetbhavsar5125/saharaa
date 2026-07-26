@@ -20,7 +20,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // P2-9: Enable R8 minification for smaller APK (important when we add TFLite model later)
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -57,9 +58,14 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
-    // Gson for local history storage
+    // Gson (still used for non-history preferences)
     implementation("com.google.code.gson:gson:2.10.1")
 
     // RecyclerView
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    // P2-8: Room database (replaces SharedPreferences for history)
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    annotationProcessor("androidx.room:room-compiler:$roomVersion")
 }

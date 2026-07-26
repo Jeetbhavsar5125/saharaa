@@ -2,6 +2,8 @@ package com.example.saharaa.activities;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class HistoryActivity extends BaseVoiceActivity {
 
@@ -30,12 +34,16 @@ public class HistoryActivity extends BaseVoiceActivity {
     private LinearLayout emptyState;
     private TextView tvTotalScans, tvBarcodeCount;
     private HistoryAdapter adapter;
-    private List<ScanRecord> records;
+    private List<ScanRecord> records = new ArrayList<>();
+
+    private final ExecutorService dbExecutor = Executors.newSingleThreadExecutor();
+    private final Handler        uiHandler  = new Handler(Looper.getMainLooper());
 
     // ─── BaseVoiceActivity contract ────────────────────────────────────────────
 
     @Override
     protected String getWelcomeMessage() {
+        // Uses the in-memory list (populated asynchronously after DB load)
         int count = records != null ? records.size() : 0;
         if (count == 0) {
             return "Scan History. No scans yet. Say back to go back.";
@@ -88,12 +96,22 @@ public class HistoryActivity extends BaseVoiceActivity {
             fabMic.setVisibility(View.GONE);
         }
 
-        // RecyclerView
+        // RecyclerView with empty placeholder list first
         recyclerHistory.setLayoutManager(new LinearLayoutManager(this));
-        records = new ArrayList<>(HistoryManager.getAll(this));
+        records = new ArrayList<>();
         adapter = new HistoryAdapter(records);
         recyclerHistory.setAdapter(adapter);
-        updateUI();
+
+        // Load records from Room on a background thread
+        dbExecutor.execute(() -> {
+            List<ScanRecord> loaded = HistoryManager.getAll(this);
+            uiHandler.post(() -> {
+                records.clear();
+                records.addAll(loaded);
+                adapter.notifyDataSetChanged();
+                updateUI();
+            });
+        });
     }
 
     // ─── UI helpers ────────────────────────────────────────────────────────────
@@ -118,6 +136,12 @@ public class HistoryActivity extends BaseVoiceActivity {
         records.clear();
         adapter.notifyDataSetChanged();
         updateUI();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        dbExecutor.shutdown();
     }
 
     // ─── Inner Adapter ─────────────────────────────────────────────────────────
