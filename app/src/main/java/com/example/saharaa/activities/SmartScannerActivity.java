@@ -87,7 +87,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
 
     // ─── State ─────────────────────────────────────────────────────────────────
     private ScanRecord pendingRecord = null;
-    private ShakeDetector shakeDetector;
+    private View tvVoiceStatus;
 
     // ─── BaseVoiceActivity contract ────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     /** Scanner has additional TTS IDs that should trigger STT restart. */
     @Override
     protected String[] getLoopBackIds() {
-        return new String[]{"READY", "RESULT_PROMPT", "LOOP_RETRY", "MANUAL", "SAVED"};
+        return new String[]{"WELCOME", "READY", "RESULT_PROMPT", "LOOP_RETRY", "MANUAL", "SAVED"};
     }
 
     /** Called once TTS is ready — start camera and announce ready state. */
@@ -196,9 +196,11 @@ public class SmartScannerActivity extends BaseVoiceActivity {
         // Save to History
         btnSaveToHistory.setOnClickListener(v -> saveCurrentRecord());
 
-        // FAB Mic
+        tvVoiceStatus = findViewById(R.id.tvVoiceStatus);
+
+        // FAB Mic (always visible for hands-free voice trigger)
         View fabMic = findViewById(R.id.fabMic);
-        if (isBlindUser && fabMic != null) {
+        if (fabMic != null) {
             fabMic.setVisibility(View.VISIBLE);
             fabMic.setOnClickListener(v -> {
                 speak("Listening", "MANUAL");
@@ -219,6 +221,13 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                 startScanningProcess();
             }
         });
+    }
+
+    @Override
+    protected void onListeningStateChanged(boolean isListening) {
+        if (tvVoiceStatus != null) {
+            tvVoiceStatus.setVisibility(isListening ? View.VISIBLE : View.GONE);
+        }
     }
 
     @Override
@@ -429,34 +438,11 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                 imageProxy.getImage(), imageProxy.getImageInfo().getRotationDegrees());
 
         if (scanMode == 1) {
+            // STRICT BARCODE SCANNING ONLY (NO OCR FALLBACK)
             scanBarcode(image, imageProxy);
         } else {
-            // Hybrid scan in Object mode: search for Barcode first, then Text
-            barcodeScanner.process(image)
-                    .addOnSuccessListener(barcodes -> {
-                        boolean foundBarcode = false;
-                        for (Barcode barcode : barcodes) {
-                            if (barcode.getRawValue() != null) {
-                                isScanning = false;
-                                foundBarcode = true;
-                                HapticHelper.success(this);
-                                fetchProductFromBarcode(barcode.getRawValue());
-                                break;
-                            }
-                        }
-                        if (!foundBarcode && isScanning) {
-                            scanText(image, imageProxy);
-                        } else {
-                            imageProxy.close();
-                        }
-                    })
-                    .addOnFailureListener(e -> {
-                        if (isScanning) {
-                            scanText(image, imageProxy);
-                        } else {
-                            imageProxy.close();
-                        }
-                    });
+            // STRICT TEXT / OCR SCANNING ONLY (NO BARCODE FALLBACK)
+            scanText(image, imageProxy);
         }
     }
 

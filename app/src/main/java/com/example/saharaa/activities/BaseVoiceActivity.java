@@ -50,6 +50,12 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
     protected void onTtsReady() {}
     protected void onListeningStateChanged(boolean isListening) {}
 
+    /** Returns whether auto-voice listening loop should be active. Defaults to true if audio permission granted. */
+    protected boolean isVoiceLoopEnabled() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -70,7 +76,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
         isActivityActive = true;
         consecutiveErrors = 0;
         if (speechRecognizer == null) initSpeechRecognizer();
-        if (isBlindUser && ttsReady && !isListening && (tts == null || !tts.isSpeaking())) {
+        if (isVoiceLoopEnabled() && ttsReady && !isListening && (tts == null || !tts.isSpeaking())) {
             mainHandler.postDelayed(this::startListeningNow, 800L);
         }
     }
@@ -115,7 +121,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
                 @Override public void onStart(String id) {}
                 @Override public void onDone(String id) {
                     consecutiveErrors = 0;
-                    if (isBlindUser && isActivityActive && isLoopBackId(id)) {
+                    if (isVoiceLoopEnabled() && isActivityActive && isLoopBackId(id)) {
                         mainHandler.postDelayed(BaseVoiceActivity.this::startListeningNow, 800L);
                     }
                 }
@@ -124,7 +130,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
                 onTtsReady();
-                if (isBlindUser) speak(getWelcomeMessage(), "WELCOME");
+                speak(getWelcomeMessage(), "WELCOME");
             });
         });
     }
@@ -157,7 +163,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
             @Override
             public void onError(int error) {
                 setListeningState(false);
-                if (!isActivityActive || !isBlindUser) return;
+                if (!isActivityActive || !isVoiceLoopEnabled()) return;
 
                 consecutiveErrors++;
                 if (consecutiveErrors > 3) {
@@ -174,7 +180,7 @@ public abstract class BaseVoiceActivity extends AppCompatActivity {
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
                     processCommand(matches.get(0).toLowerCase());
-                } else if (isActivityActive && isBlindUser) {
+                } else if (isActivityActive && isVoiceLoopEnabled()) {
                     mainHandler.postDelayed(BaseVoiceActivity.this::startListeningNow, 1000L);
                 }
             }
