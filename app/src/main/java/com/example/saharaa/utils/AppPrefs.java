@@ -11,10 +11,11 @@ public final class AppPrefs {
     public static final String PREFS_HISTORY = "SaharaaHistory";
 
     // Keys — main preferences
-    public static final String KEY_IS_BLIND    = "IS_BLIND";
-    public static final String KEY_LANGUAGE    = "LANGUAGE";
-    public static final String KEY_SETUP_DONE  = "SETUP_COMPLETE";
-    public static final String KEY_SPEECH_RATE = "SPEECH_RATE";
+    public static final String KEY_IS_BLIND      = "IS_BLIND";
+    public static final String KEY_LANGUAGE      = "LANGUAGE";
+    public static final String KEY_SETUP_DONE    = "SETUP_COMPLETE";
+    public static final String KEY_SPEECH_RATE   = "SPEECH_RATE";
+    public static final String KEY_GEMINI_API_KEY = "GEMINI_API_KEY";
 
     // Keys — history
     public static final String KEY_SCAN_RECORDS = "scan_records";

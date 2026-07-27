@@ -27,9 +27,11 @@ import androidx.core.content.ContextCompat;
 
 import com.example.saharaa.R;
 import com.example.saharaa.model.ScanRecord;
+import com.example.saharaa.network.GeminiVisionClient;
 import com.example.saharaa.network.OpenFoodFactsApi;
 import com.example.saharaa.network.ProductResponse;
 import com.example.saharaa.network.RetrofitClient;
+import com.example.saharaa.utils.AppPrefs;
 import com.example.saharaa.utils.HapticHelper;
 import com.example.saharaa.utils.HistoryManager;
 import com.example.saharaa.utils.InfoParser;
@@ -439,11 +441,49 @@ public class SmartScannerActivity extends BaseVoiceActivity {
                 imageProxy.getImage(), imageProxy.getImageInfo().getRotationDegrees());
 
         if (scanMode == 1) {
-            // STRICT BARCODE SCANNING ONLY (NO OCR FALLBACK)
+            // STRICT BARCODE SCANNING ONLY
             scanBarcode(image, imageProxy);
         } else {
-            // STRICT TEXT / OCR SCANNING ONLY (NO BARCODE FALLBACK)
-            scanText(image, imageProxy);
+            // OBJECT / TEXT SCANNING: Check if Gemini AI Key is set for AI Multimodal Object Recognition
+            String geminiApiKey = getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
+                    .getString(AppPrefs.KEY_GEMINI_API_KEY, null);
+
+            android.graphics.Bitmap bitmap = viewFinder.getBitmap();
+            if (geminiApiKey != null && !geminiApiKey.isEmpty() && bitmap != null) {
+                isScanning = false;
+                imageProxy.close();
+                runOnUiThread(() -> {
+                    speak("Analyzing object with AI. Please hold steady.", "FETCHING");
+                    showLoadingPanel();
+                });
+
+                GeminiVisionClient.analyzeImage(bitmap, geminiApiKey, null, new GeminiVisionClient.GeminiCallback() {
+                    @Override
+                    public void onSuccess(String resultText) {
+                        runOnUiThread(() -> {
+                            HapticHelper.success(SmartScannerActivity.this);
+                            speak(resultText + ". Say scan again, save, or back.", "RESULT_PROMPT");
+                            String[][] rows = {
+                                    {"AI Object Description", resultText},
+                                    {"AI Engine", "Gemini 1.5 Flash Vision"}
+                            };
+                            ScanRecord record = new ScanRecord(ScanRecord.TYPE_TEXT, resultText, "Gemini AI", null, null, resultText);
+                            showProductResult(resultText, "✨ Gemini AI Object Identification", rows, record);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String errorMessage) {
+                        runOnUiThread(() -> {
+                            // Fallback to local OCR scanning
+                            isScanning = true;
+                        });
+                    }
+                });
+            } else {
+                // STRICT TEXT / OCR SCANNING ONLY (Local Offline Mode)
+                scanText(image, imageProxy);
+            }
         }
     }
 
