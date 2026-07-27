@@ -88,8 +88,8 @@ public class GeminiVisionClient {
 
         // 4. Send HTTP POST request
         RequestBody body = RequestBody.create(
-                rootJson.toString(),
-                MediaType.parse("application/json; charset=utf-8")
+                MediaType.parse("application/json; charset=utf-8"),
+                rootJson.toString()
         );
 
         Request request = new Request.Builder()
