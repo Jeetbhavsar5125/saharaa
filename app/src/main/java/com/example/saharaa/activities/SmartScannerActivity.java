@@ -91,6 +91,7 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     private ScanRecord pendingRecord = null;
     private View tvVoiceStatus;
     private ShakeDetector shakeDetector;
+    private boolean useLocalOcrFallback = false;
 
     // ─── BaseVoiceActivity contract ────────────────────────────────────────────
 
@@ -291,8 +292,52 @@ public class SmartScannerActivity extends BaseVoiceActivity {
     private void startScanningProcess() {
         isScanning    = true;
         scanStartTime = System.currentTimeMillis();
-        HapticHelper.scanStart(this); // P3-1: 1-pulse haptic
+        HapticHelper.scanStart(this);
         showLoadingPanel();
+
+        // Check if Gemini Vision API key is configured (via SharedPreferences or local.properties BuildConfig secret)
+        String geminiApiKey = getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
+                .getString(AppPrefs.KEY_GEMINI_API_KEY, null);
+        if (geminiApiKey == null || geminiApiKey.isEmpty()) {
+            geminiApiKey = com.example.saharaa.BuildConfig.GEMINI_API_KEY;
+        }
+
+        if (scanMode == 0 && !useLocalOcrFallback && geminiApiKey != null && !geminiApiKey.isEmpty()) {
+            android.graphics.Bitmap bitmap = viewFinder.getBitmap();
+            if (bitmap != null) {
+                isScanning = false; // Stop continuous frame analyzer while Gemini processes
+                speak("Analyzing product with AI. Please hold steady.", "SCANNING");
+
+                GeminiVisionClient.analyzeImage(bitmap, geminiApiKey, null, new GeminiVisionClient.GeminiCallback() {
+                    @Override
+                    public void onSuccess(String resultText) {
+                        runOnUiThread(() -> {
+                            HapticHelper.success(SmartScannerActivity.this);
+                            speak(resultText + ". Say scan again, save to history, or back.", "RESULT_PROMPT");
+                            String[][] rows = {
+                                    {"AI Product Analysis", resultText},
+                                    {"AI Model Engine", "Gemini 1.5 Flash Vision"}
+                            };
+                            ScanRecord record = new ScanRecord(ScanRecord.TYPE_TEXT, resultText, "Gemini AI", null, null, resultText);
+                            showProductResult(resultText, "✨ Gemini AI Product Identification", rows, record);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String errorMessage) {
+                        runOnUiThread(() -> {
+                            useLocalOcrFallback = true;
+                            HapticHelper.failure(SmartScannerActivity.this);
+                            speak("AI error. Switching to local text scanner. Press volume up or say scan to read text.", "RESULT_PROMPT");
+                            showIdlePanel();
+                            isScanning = false;
+                        });
+                    }
+                });
+                return;
+            }
+        }
+
         speak("Scanning. Please hold steady.", "SCANNING");
     }
 
@@ -444,46 +489,8 @@ public class SmartScannerActivity extends BaseVoiceActivity {
             // STRICT BARCODE SCANNING ONLY
             scanBarcode(image, imageProxy);
         } else {
-            // OBJECT / TEXT SCANNING: Check if Gemini AI Key is set for AI Multimodal Object Recognition
-            String geminiApiKey = getSharedPreferences(AppPrefs.PREFS_MAIN, MODE_PRIVATE)
-                    .getString(AppPrefs.KEY_GEMINI_API_KEY, null);
-
-            android.graphics.Bitmap bitmap = viewFinder.getBitmap();
-            if (geminiApiKey != null && !geminiApiKey.isEmpty() && bitmap != null) {
-                isScanning = false;
-                imageProxy.close();
-                runOnUiThread(() -> {
-                    speak("Analyzing object with AI. Please hold steady.", "FETCHING");
-                    showLoadingPanel();
-                });
-
-                GeminiVisionClient.analyzeImage(bitmap, geminiApiKey, null, new GeminiVisionClient.GeminiCallback() {
-                    @Override
-                    public void onSuccess(String resultText) {
-                        runOnUiThread(() -> {
-                            HapticHelper.success(SmartScannerActivity.this);
-                            speak(resultText + ". Say scan again, save, or back.", "RESULT_PROMPT");
-                            String[][] rows = {
-                                    {"AI Object Description", resultText},
-                                    {"AI Engine", "Gemini 1.5 Flash Vision"}
-                            };
-                            ScanRecord record = new ScanRecord(ScanRecord.TYPE_TEXT, resultText, "Gemini AI", null, null, resultText);
-                            showProductResult(resultText, "✨ Gemini AI Object Identification", rows, record);
-                        });
-                    }
-
-                    @Override
-                    public void onError(String errorMessage) {
-                        runOnUiThread(() -> {
-                            // Fallback to local OCR scanning
-                            isScanning = true;
-                        });
-                    }
-                });
-            } else {
-                // STRICT TEXT / OCR SCANNING ONLY (Local Offline Mode)
-                scanText(image, imageProxy);
-            }
+            // STRICT TEXT / OCR SCANNING ONLY (Local Offline Mode)
+            scanText(image, imageProxy);
         }
     }
 

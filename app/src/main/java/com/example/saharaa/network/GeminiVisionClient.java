@@ -61,20 +61,24 @@ public class GeminiVisionClient {
         byte[] imageBytes = baos.toByteArray();
         String base64Image = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
 
-        // 3. Build JSON payload for Gemini API
+        // 3. Build JSON payload for Gemini API (Must use camelCase: inlineData and mimeType)
         JsonObject mimeData = new JsonObject();
-        mimeData.addProperty("mime_type", "image/jpeg");
+        mimeData.addProperty("mimeType", "image/jpeg");
         mimeData.addProperty("data", base64Image);
 
-        JsonObject inlineData = new JsonObject();
-        inlineData.add("inline_data", mimeData);
+        JsonObject inlineDataObj = new JsonObject();
+        inlineDataObj.add("inlineData", mimeData);
 
         JsonObject textPart = new JsonObject();
         textPart.addProperty("text", userPrompt != null && !userPrompt.isEmpty() ? userPrompt :
-                "Identify the main object or product in this image. State its name, brand, or key details clearly in 1 to 2 short sentences for a blind user.");
+                "You are an AI vision assistant for blind and elderly users. Analyze this image of a product or object and provide a 3-part response spoken in simple, clear sentences:\n" +
+                "1. IDENTIFICATION: State the category (e.g., Food Packet, Medicine, Fresh Food, Household Item) and the exact product name with brand.\n" +
+                "2. KEY PACKET DETAILS: Read the net weight/quantity, price or MRP, and expiry date if visible on the packet.\n" +
+                "3. SAFETY VERDICT: State clearly whether the item appears safe to use or consume, or if there is a warning.\n" +
+                "Keep the total answer under 3 to 4 short sentences. Do not use asterisks or formatting symbols.");
 
         JsonArray parts = new JsonArray();
-        parts.add(inlineData);
+        parts.add(inlineDataObj);
         parts.add(textPart);
 
         JsonObject contentObj = new JsonObject();
@@ -107,8 +111,9 @@ public class GeminiVisionClient {
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 if (!response.isSuccessful()) {
-                    Log.e(TAG, "Gemini API error response: " + response.code());
-                    callback.onError("Gemini API error code: " + response.code());
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    Log.e(TAG, "Gemini API error response: " + response.code() + " -> " + errorBody);
+                    callback.onError("Gemini API error " + response.code() + ": " + (errorBody.contains("message") ? errorBody : "Check API key or quota"));
                     return;
                 }
 
